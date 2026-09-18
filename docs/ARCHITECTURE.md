@@ -121,13 +121,16 @@ interface ITimeLog {
   3. Otherwise, creates the new log with `startedAt = new Date()`.
 - Stopping a timer sets `endedAt = new Date()` and calculates `duration = Math.floor((endedAt - startedAt) / 1000)`.
 
-### 4.2 Resource Ownership & Isolation
-- Queries never trust user IDs from the client body or URL.
-- All CRUD queries must explicitly scope by user:
-  ```typescript
-  Task.findOne({ _id: taskId, userId: req.user.id });
-  TimeLog.find({ userId: req.user.id });
-  ```
+### 4.2 Resource Ownership & Strict Data Isolation
+- **Authoritative Identity**: The authenticated user ID originates strictly from the verified JWT payload attached to `req.user.id` by the `requireAuth` middleware.
+- **Client Input Disallowed**: The API never accepts a client-provided `userId` for creating, querying, modifying, or deleting resources.
+- **Strict Query Scoping**:
+  - `Task.find({ userId: req.user.id })` (scoped task listing)
+  - `Task.findOne({ _id: taskId, userId: req.user.id })` (scoped single-task retrieval)
+  - `Task.findOneAndUpdate({ _id: taskId, userId: req.user.id }, ...)` (scoped update)
+  - `Task.deleteOne({ _id: taskId, userId: req.user.id })` (scoped deletion)
+- **Safe 404 Responses**: Attempting to query, update, or delete another user's task yields `404 Not Found`, preventing ID enumeration and resource existence leaking.
+- **Active Timer Deletion Protection**: Before a task is deleted, the service queries `TimeLog.findOne({ taskId, userId: req.user.id, endedAt: null })`. If an active timer is running, the deletion is rejected with `409 Conflict` and message `"Cannot delete a task while its timer is running."`.
 
 ### 4.3 Timezone-Aware Daily Summary
 - The daily summary endpoint accepts an optional `date` (YYYY-MM-DD) and client `timezone` (e.g. `Asia/Kolkata`, `UTC`).

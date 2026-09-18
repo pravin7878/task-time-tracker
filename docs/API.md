@@ -89,38 +89,91 @@ All responses follow a standard envelope format:
 ## 3. Tasks (`/api/tasks`)
 
 ### `GET /api/tasks`
-- **Description**: Retrieve all tasks belonging to the current user.
-- **Query Params (optional)**: `status` (`pending`, `in_progress`, `completed`).
-- **Auth**: Required
+- **Description**: Retrieve all tasks belonging strictly to the authenticated user. Sorted newest first (`createdAt: -1`).
+- **Query Params (optional)**:
+  - `status`: Filter by status (`pending`, `in_progress`, `completed`).
+- **Auth**: Required (JWT cookie)
 - **Responses**:
-  - `200 OK`: Array of task objects with calculated `totalTimeSpent` (seconds).
+  - `200 OK`:
+```json
+{
+  "success": true,
+  "data": {
+    "tasks": [
+      {
+        "id": "6643abc12345678901234567",
+        "title": "Follow up with UI Designer",
+        "description": "Send Slack message regarding wireframe delivery",
+        "status": "in_progress",
+        "createdAt": "2026-09-18T10:00:00.000Z",
+        "updatedAt": "2026-09-18T10:30:00.000Z"
+      }
+    ]
+  }
+}
+```
+  - `400 Bad Request`: Invalid status query parameter.
+  - `401 Unauthorized`: Unauthenticated request.
 
 ### `POST /api/tasks`
-- **Description**: Create a new task.
-- **Auth**: Required
+- **Description**: Create a new task using standard or natural language input (e.g., *"follow up with designer"*).
+- **Auth**: Required (JWT cookie)
 - **Request Body**:
 ```json
 {
-  "title": "Follow up with designer",
+  "title": "follow up with designer",
   "description": "Discuss wireframes for the timer module",
   "status": "pending"
 }
 ```
 - **Responses**:
-  - `201 Created`: Created task object.
-  - `400 Bad Request`: Validation error.
+  - `201 Created`:
+```json
+{
+  "success": true,
+  "data": {
+    "task": {
+      "id": "6643abc12345678901234567",
+      "title": "follow up with designer",
+      "description": "Discuss wireframes for the timer module",
+      "status": "pending",
+      "createdAt": "2026-09-18T10:00:00.000Z",
+      "updatedAt": "2026-09-18T10:00:00.000Z"
+    }
+  }
+}
+```
+  - `400 Bad Request`: Title missing or empty, string length exceeded, or invalid status value.
+  - `401 Unauthorized`: Authentication required.
 
 ### `GET /api/tasks/:id`
-- **Description**: Retrieve a single task by ID.
-- **Auth**: Required
+- **Description**: Retrieve a single task by ID. Strictly scoped to the authenticated user.
+- **Auth**: Required (JWT cookie)
 - **Responses**:
-  - `200 OK`: Task details.
-  - `404 Not Found`: Task does not exist or belongs to another user.
+  - `200 OK`:
+```json
+{
+  "success": true,
+  "data": {
+    "task": {
+      "id": "6643abc12345678901234567",
+      "title": "follow up with designer",
+      "description": "Discuss wireframes for the timer module",
+      "status": "pending",
+      "createdAt": "2026-09-18T10:00:00.000Z",
+      "updatedAt": "2026-09-18T10:00:00.000Z"
+    }
+  }
+}
+```
+  - `400 Bad Request`: Invalid MongoDB ObjectId format.
+  - `401 Unauthorized`: Authentication required.
+  - `404 Not Found`: Task does not exist or belongs to another user (never exposes unauthorized existence).
 
-### `PUT /api/tasks/:id`
-- **Description**: Update an existing task.
-- **Auth**: Required
-- **Request Body**:
+### `PATCH /api/tasks/:id`
+- **Description**: Update an existing task's title, description, or status. Only allowed fields (`title`, `description`, `status`) are accepted. Disallows changing `userId` or arbitrary fields.
+- **Auth**: Required (JWT cookie)
+- **Request Body** (at least one field required):
 ```json
 {
   "title": "Follow up with UI Designer",
@@ -129,16 +182,40 @@ All responses follow a standard envelope format:
 }
 ```
 - **Responses**:
-  - `200 OK`: Updated task.
-  - `400 Bad Request`: Validation error.
-  - `404 Not Found`: Task not found.
+  - `200 OK`:
+```json
+{
+  "success": true,
+  "data": {
+    "task": {
+      "id": "6643abc12345678901234567",
+      "title": "Follow up with UI Designer",
+      "description": "Send Slack message regarding wireframe delivery",
+      "status": "in_progress",
+      "createdAt": "2026-09-18T10:00:00.000Z",
+      "updatedAt": "2026-09-18T11:00:00.000Z"
+    }
+  }
+}
+```
+  - `400 Bad Request`: Validation failure or unexpected fields.
+  - `401 Unauthorized`: Authentication required.
+  - `404 Not Found`: Task does not exist or belongs to another user.
 
 ### `DELETE /api/tasks/:id`
-- **Description**: Delete a task.
-- **Auth**: Required
+- **Description**: Delete a task. Prevents deletion if the task has an active timer session running (`endedAt: null`).
+- **Auth**: Required (JWT cookie)
 - **Responses**:
-  - `200 OK`: Task deleted.
-  - `404 Not Found`: Task not found.
+  - `200 OK`:
+```json
+{
+  "success": true,
+  "message": "Task deleted successfully"
+}
+```
+  - `400 Bad Request`: Invalid MongoDB ObjectId format.
+  - `401 Unauthorized`: Authentication required.
+  - `404 Not Found`: Task does not exist or belongs to another user.
   - `409 Conflict`: `"Cannot delete a task while its timer is running."`
 
 ---

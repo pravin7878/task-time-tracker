@@ -105,4 +105,58 @@ This log records prompts, architectural decisions, implementations, and verifica
   - Zero remaining references to `AuthService`, `authService`, `AuthController`, or `authController`.
   - Test runner executed against configured MongoDB Atlas cluster: **45 passed, 0 failed** across all 12 authentication and security test suites. Temporary test data was cleanly purged.
 
+---
 
+## Milestone 3: Complete Task Management API
+
+- **Date**: 2026-09-18
+- **Objective**: Implement secure, user-isolated CRUD endpoints for task management (`POST /api/tasks`, `GET /api/tasks`, `GET /api/tasks/:id`, `PATCH /api/tasks/:id`, `DELETE /api/tasks/:id`) using a 100% functional architecture, natural language input support, strict status lifecycle validation (`pending`, `in_progress`, `completed`), and active-timer deletion protection (`409 Conflict`).
+- **Prompt Used**:
+  > "Milestone 2 (Authentication API) is complete, reviewed, and committed.
+  > Now proceed with Milestone 3: Complete Task Management API.
+  > Follow the Employer Assignment and Engineering Master Prompt already provided in this project.
+  > IMPORTANT: This milestone is ONLY for the backend Task Management API.
+  > Do NOT implement: frontend task UI, time tracking/timers, daily summary, AI task enhancement, charts, notifications...
+  > 1. Task Model (userId, title, description, status: pending | in_progress | completed)
+  > 2. Create Task (natural language input, default pending, auth required, 201)
+  > 3. Get All Tasks (user-scoped, newest first, status filter)
+  > 4. Get Single Task (user-scoped, 404 if not owner)
+  > 5. Update Task (PATCH, allowed fields: title, description, status; disallow userId mutation)
+  > 6. Delete Task (409 Conflict if active timer running, 200 on success)
+  > 7. Architecture (pure functional controllers & services)
+  > 8. Validation (explicit runtime validation without Zod)
+  > 9. Authorization/Data Isolation (strict user scoping)
+  > 10. Centralized error handling & tests..."
+- **Implementation Summary**:
+  - Authored domain types in `backend/src/types/task.types.ts` (`ITask`, `TaskStatus`, `CreateTaskDTO`, `UpdateTaskDTO`, `TaskResponse`, `TaskQueryFilter`).
+  - Implemented `Task` Mongoose model in `backend/src/models/task.model.ts` with compound indexing (`userId: 1, createdAt: -1` and `userId: 1, status: 1`).
+  - Implemented `TimeLog` model in `backend/src/models/timeLog.model.ts` supporting session tracking and active timer check on task deletion.
+  - Built explicit runtime validators in `backend/src/validators/task.validator.ts` (`validateTaskId`, `validateCreateTaskInput`, `validateUpdateTaskInput`, `validateTaskStatusQuery`).
+  - Built pure functional service in `backend/src/services/task.service.ts` (`createTask`, `getTasks`, `getTaskById`, `updateTask`, `deleteTask`).
+  - Built pure functional controller in `backend/src/controllers/task.controller.ts`.
+  - Built task routes in `backend/src/routes/task.routes.ts` mounted at `/api/tasks` with `requireAuth` protection.
+  - Implemented active timer deletion safeguard returning `409 Conflict` with `"Cannot delete a task while its timer is running."` if `endedAt: null`.
+  - Authored comprehensive automated test suite `backend/src/test_tasks.ts` executing 38 assertions across 15 suites against MongoDB Atlas.
+- **Architectural Decisions**:
+  - *Functional Architecture*: Zero classes were used in controllers or services; all operations are pure async functions.
+  - *Strict Data Isolation*: Every query explicitly checks `{ _id: taskId, userId: req.user.id }`. Accessing another user's task yields a clean `404 Not Found`, preventing resource enumeration.
+  - *Field Immutability*: `PATCH /api/tasks/:id` validates against an explicit whitelist (`title`, `description`, `status`) and rejects any attempt to modify `userId` or arbitrary fields.
+- **Files Changed**:
+  - `backend/src/types/task.types.ts` (new domain types)
+  - `backend/src/models/task.model.ts` (new Mongoose Task model)
+  - `backend/src/models/timeLog.model.ts` (new Mongoose TimeLog model)
+  - `backend/src/validators/task.validator.ts` (new runtime validators)
+  - `backend/src/services/task.service.ts` (new functional service)
+  - `backend/src/controllers/task.controller.ts` (new functional controller)
+  - `backend/src/routes/task.routes.ts` (new task routes)
+  - `backend/src/app.ts` (mounted `/api/tasks`)
+  - `backend/package.json` (added `test:tasks` script)
+  - `backend/src/test_tasks.ts` (automated Task API test runner)
+  - `docs/API.md` (updated with Task endpoints and schemas)
+  - `docs/ARCHITECTURE.md` (updated with Task model and data isolation patterns)
+  - `docs/AI_DEVELOPMENT_LOG.md` (logged Milestone 3 activity)
+- **Verification Performed & Results**:
+  - TypeScript build (`npm run build`): **PASSED** with 0 errors.
+  - Auth test suite (`npm run test:auth`): **45 passed, 0 failed**.
+  - Task API test suite (`npm run test:tasks`): **38 passed, 0 failed**.
+  - Class audit (`class\s+\w+`): **0 class declarations found across `backend/src/`**.
