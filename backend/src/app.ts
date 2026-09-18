@@ -5,6 +5,8 @@ import cookieParser from 'cookie-parser';
 import { env } from './config/env';
 import authRoutes from './routes/auth.routes';
 import taskRoutes from './routes/task.routes';
+import timerRoutes from './routes/timer.routes';
+import timeLogRoutes from './routes/timeLog.routes';
 import { errorHandler } from './middleware/error.middleware';
 
 const app = express();
@@ -36,6 +38,8 @@ app.get('/api/health', (_req: Request, res: Response) => {
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/tasks', taskRoutes);
+app.use('/api/timer', timerRoutes);
+app.use('/api/time-logs', timeLogRoutes);
 
 // 404 handler for unknown API routes
 app.use((_req: Request, res: Response) => {

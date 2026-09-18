@@ -220,42 +220,184 @@ All responses follow a standard envelope format:
 
 ---
 
-## 4. Time Tracking (`/api/timer` & `/api/time-logs`)
+## 4. Time Tracking (`/api/tasks/:taskId/timer`, `/api/timer`, `/api/time-logs`)
 
-### `POST /api/timer/start`
-- **Description**: Start real-time tracking for a task.
-- **Auth**: Required
-- **Request Body**:
-```json
-{
-  "taskId": "6643abc123..."
-}
-```
+### `POST /api/tasks/:taskId/timer/start`
+- **Description**: Start real-time time tracking for a specific task.
+- **Auth**: Required (JWT cookie)
+- **URL Parameters**:
+  - `taskId`: Valid 24-character hexadecimal MongoDB ObjectId.
+- **Request Body**: Empty `{}`. (Client must **not** provide `userId`, `startedAt`, `endedAt`, or `duration`; supplying prohibited server-controlled fields returns `400 Bad Request`).
 - **Responses**:
-  - `201 Created`: Created active `TimeLog` (`endedAt: null`).
+  - `201 Created`: Active `TimeLog` created with `endedAt: null` and `duration: null`.
+  ```json
+  {
+    "success": true,
+    "data": {
+      "timeLog": {
+        "id": "6643def12345678901234567",
+        "userId": "6643abc12345678901234567",
+        "taskId": "6643bba12345678901234567",
+        "startedAt": "2026-09-18T12:00:00.000Z",
+        "endedAt": null,
+        "duration": null,
+        "createdAt": "2026-09-18T12:00:00.000Z",
+        "updatedAt": "2026-09-18T12:00:00.000Z"
+      }
+    }
+  }
+  ```
+  - `400 Bad Request`: Invalid `taskId` format or client attempting to supply server-controlled fields.
+  - `401 Unauthorized`: Unauthenticated request.
   - `404 Not Found`: Task does not exist or belongs to another user.
   - `409 Conflict`: User already has an active timer running.
+  ```json
+  {
+    "success": false,
+    "message": "Another timer is already running. Stop it before starting a new timer."
+  }
+  ```
 
-### `POST /api/timer/stop`
-- **Description**: Stop currently active tracking session.
-- **Auth**: Required
-- **Request Body**: (Optional `taskId` to confirm stopping specific task, or stops user's active timer).
+### `POST /api/tasks/:taskId/timer/stop`
+- **Description**: Stop the currently active timer for the specified task.
+- **Auth**: Required (JWT cookie)
+- **URL Parameters**:
+  - `taskId`: Valid 24-character hexadecimal MongoDB ObjectId.
+- **Request Body**: Empty `{}`.
 - **Responses**:
-  - `200 OK`: Completed `TimeLog` with calculated `duration` and `endedAt`.
-  - `404 Not Found`: No active timer found for user.
+  - `200 OK`: Completed `TimeLog` with server-calculated `endedAt` and integer `duration` (in seconds).
+  ```json
+  {
+    "success": true,
+    "data": {
+      "timeLog": {
+        "id": "6643def12345678901234567",
+        "userId": "6643abc12345678901234567",
+        "taskId": "6643bba12345678901234567",
+        "startedAt": "2026-09-18T12:00:00.000Z",
+        "endedAt": "2026-09-18T12:25:30.450Z",
+        "duration": 1530,
+        "createdAt": "2026-09-18T12:00:00.000Z",
+        "updatedAt": "2026-09-18T12:25:30.450Z"
+      }
+    }
+  }
+  ```
+  - `400 Bad Request`: Invalid `taskId` format.
+  - `401 Unauthorized`: Unauthenticated request.
+  - `404 Not Found`: No active timer found for this task and user (or task does not belong to user).
+  ```json
+  {
+    "success": false,
+    "message": "No active timer found for this task."
+  }
+  ```
 
 ### `GET /api/timer/active`
-- **Description**: Retrieve current active timer session for page reload recovery.
-- **Auth**: Required
+- **Description**: Retrieve the authenticated user's currently running active timer (`endedAt: null`). Allows the frontend to reconstruct timer state after page refresh, browser restart, or tab navigation.
+- **Auth**: Required (JWT cookie)
 - **Responses**:
-  - `200 OK`: Active `TimeLog` or `null` if no timer is active.
+  - `200 OK` (Timer active):
+  ```json
+  {
+    "success": true,
+    "data": {
+      "activeTimer": {
+        "id": "6643def12345678901234567",
+        "userId": "6643abc12345678901234567",
+        "taskId": "6643bba12345678901234567",
+        "startedAt": "2026-09-18T12:00:00.000Z",
+        "endedAt": null,
+        "duration": null,
+        "createdAt": "2026-09-18T12:00:00.000Z",
+        "updatedAt": "2026-09-18T12:00:00.000Z"
+      }
+    }
+  }
+  ```
+  - `200 OK` (No timer active):
+  ```json
+  {
+    "success": true,
+    "data": {
+      "activeTimer": null
+    }
+  }
+  ```
+  - `401 Unauthorized`: Unauthenticated request.
 
 ### `GET /api/time-logs`
-- **Description**: List historical time logs for the user.
-- **Query Params (optional)**: `taskId`, `startDate`, `endDate`, `limit`, `page`.
-- **Auth**: Required
+- **Description**: Retrieve chronological session history for all tasks belonging strictly to the authenticated user, ordered newest first (`startedAt: -1`).
+- **Auth**: Required (JWT cookie)
 - **Responses**:
-  - `200 OK`: Array of time log items with task reference.
+  - `200 OK`:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "timeLogs": [
+        {
+          "id": "6643def12345678901234567",
+          "userId": "6643abc12345678901234567",
+          "taskId": "6643bba12345678901234567",
+          "startedAt": "2026-09-18T12:00:00.000Z",
+          "endedAt": "2026-09-18T12:25:30.000Z",
+          "duration": 1530,
+          "createdAt": "2026-09-18T12:00:00.000Z",
+          "updatedAt": "2026-09-18T12:25:30.000Z"
+        }
+      ]
+    }
+  }
+  ```
+  - `401 Unauthorized`: Unauthenticated request.
+
+### `GET /api/tasks/:taskId/time-logs`
+- **Description**: Retrieve session logs and computed total tracked time strictly for a specific task owned by the authenticated user.
+- **Auth**: Required (JWT cookie)
+- **URL Parameters**:
+  - `taskId`: Valid 24-character hexadecimal MongoDB ObjectId.
+- **Responses**:
+  - `200 OK`:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "taskId": "6643bba12345678901234567",
+      "totalTrackedSeconds": 3600,
+      "timeLogs": [
+        {
+          "id": "6643def12345678901234567",
+          "userId": "6643abc12345678901234567",
+          "taskId": "6643bba12345678901234567",
+          "startedAt": "2026-09-18T12:00:00.000Z",
+          "endedAt": "2026-09-18T12:30:00.000Z",
+          "duration": 1800,
+          "createdAt": "2026-09-18T12:00:00.000Z",
+          "updatedAt": "2026-09-18T12:30:00.000Z"
+        },
+        {
+          "id": "6643def98765432109876543",
+          "userId": "6643abc12345678901234567",
+          "taskId": "6643bba12345678901234567",
+          "startedAt": "2026-09-18T11:00:00.000Z",
+          "endedAt": "2026-09-18T11:30:00.000Z",
+          "duration": 1800,
+          "createdAt": "2026-09-18T11:00:00.000Z",
+          "updatedAt": "2026-09-18T11:30:00.000Z"
+        }
+      ]
+    }
+  }
+  ```
+  - `400 Bad Request`: Invalid `taskId` format.
+  - `401 Unauthorized`: Unauthenticated request.
+  - `404 Not Found`: Task does not exist or belongs to another user.
+
+### Total Time Per Task Semantics:
+- **Calculation**: Dynamically derived as `SUM(duration)` across all completed sessions (`endedAt: { $ne: null }`) belonging to `userId` and `taskId`.
+- **Active Session Policy**: The currently running active session is excluded from the persisted completed duration total until it is officially stopped.
+- **Data Integrity**: Total time is never stored as a mutable or redundant `Task.totalTime` property on the `Task` document, guaranteeing complete normalization and zero drift.
 
 ---
 

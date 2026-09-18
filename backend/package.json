@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "test:auth": "tsx src/test_auth.ts",
-    "test:tasks": "tsx src/test_tasks.ts"
+    "test:tasks": "tsx src/test_tasks.ts",
+    "test:timer": "tsx src/test_timer.ts"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

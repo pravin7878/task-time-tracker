@@ -46,7 +46,19 @@ const timeLogSchema = new Schema<TimeLogDocument>(
   }
 );
 
-timeLogSchema.index({ userId: 1, taskId: 1, endedAt: 1 });
+// Ensure at the database level that a user can have AT MOST ONE active timer (endedAt: null)
+timeLogSchema.index(
+  { userId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { endedAt: null },
+    name: 'unique_active_timer_per_user',
+  }
+);
+
+// Optimize time log queries: active timer lookup, task time logs, and user history
 timeLogSchema.index({ userId: 1, endedAt: 1 });
+timeLogSchema.index({ userId: 1, taskId: 1, startedAt: -1 });
+timeLogSchema.index({ userId: 1, startedAt: -1 });
 
 export const TimeLog = model<TimeLogDocument>('TimeLog', timeLogSchema);

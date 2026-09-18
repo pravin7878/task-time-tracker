@@ -160,3 +160,78 @@ This log records prompts, architectural decisions, implementations, and verifica
   - Auth test suite (`npm run test:auth`): **45 passed, 0 failed**.
   - Task API test suite (`npm run test:tasks`): **38 passed, 0 failed**.
   - Class audit (`class\s+\w+`): **0 class declarations found across `backend/src/`**.
+
+---
+
+## Milestone 4: Complete Time Tracking API
+
+- **Date**: 2026-09-18
+- **Objective**: Implement authoritative server-side time tracking endpoints (`POST /api/tasks/:taskId/timer/start`, `POST /api/tasks/:taskId/timer/stop`, `GET /api/timer/active`, `GET /api/time-logs`, `GET /api/tasks/:taskId/time-logs`) using 100% functional architecture, server-generated timestamps, backend integer duration calculation, single active timer constraint with database-level concurrency protection, user data isolation, and regression safety.
+- **Prompt Used**:
+  > "Milestone 3 (Task Management API) is complete, reviewed, tested against MongoDB Atlas, and committed.
+  > Now proceed with Milestone 4: Complete Time Tracking API.
+  > Follow the Employer Assignment and Engineering Master Prompt already provided in this project.
+  > IMPORTANT: This milestone is ONLY for the backend Time Tracking API.
+  > Do NOT implement: frontend timer UI, frontend timer hook, dashboard, daily summary, AI task enhancement, charts, notifications...
+  > 1. TimeLog Data Model (userId, taskId, startedAt, endedAt, duration, createdAt, updatedAt; server-controlled fields; no Task.totalTime)
+  > 2. Start Timer (POST /api/tasks/:taskId/timer/start, auth required, task ownership verified, 409 if active timer exists, 201 Created)
+  > 3. One Active Timer Per User (concurrency protection via MongoDB unique partial index, translate 11000 into 409 Conflict)
+  > 4. Stop Timer (POST /api/tasks/:taskId/timer/stop, server endedAt, duration = floor((endedAt - startedAt) / 1000), 200 OK, 404 if no active timer)
+  > 5. Duration Correctness (integer seconds, Math.max(0, ...), no negative duration)
+  > 6. Active Timer Endpoint (GET /api/timer/active, reload recovery, return null if no timer active)
+  > 7. Time Log History (GET /api/time-logs, user-scoped, newest first)
+  > 8. Task-Specific Time Logs (GET /api/tasks/:taskId/time-logs, user + task scoped)
+  > 9. Total Time Per Task (derived dynamically via SUM(duration) over completed sessions, no Task.totalTime field)
+  > 10. Task Ownership (enforced across all endpoints via req.user.id)
+  > 11. Active Timer / Task Delete Safeguard (retained from Milestone 3)
+  > 12. Response format standard envelope, functional architecture, runtime validation without Zod..."
+- **Implementation Summary**:
+  - Defined domain types in `backend/src/types/timeLog.types.ts` (`ITimeLog`, `TimeLogDocument`, `TimeLogResponse`, `ActiveTimerResponse`, `TaskTimeLogsResponse`, `UserTimeLogsResponse`).
+  - Enhanced existing `TimeLog` model in `backend/src/models/timeLog.model.ts`:
+    - Added partial unique index `{ userId: 1 }` with `{ unique: true, partialFilterExpression: { endedAt: null }, name: 'unique_active_timer_per_user' }` to enforce single active timer per user at the database engine level.
+    - Added query performance indexes: `{ userId: 1, startedAt: -1 }`, `{ userId: 1, taskId: 1, startedAt: -1 }`, and `{ userId: 1, endedAt: 1 }`.
+  - Created runtime input validators in `backend/src/validators/timer.validator.ts` (`validateTaskIdParam`, `validateTimerStartInput` rejecting client-supplied server fields).
+  - Built pure functional service in `backend/src/services/timer.service.ts`:
+    - `startTimer`: Enforces task ownership (`Task.findOne({ _id: taskId, userId })`), application-level active timer check, and gracefully catches MongoDB E11000 duplicate key errors to throw `409 Conflict`.
+    - `stopTimer`: Atomically locates active session (`{ userId, taskId, endedAt: null }`), stamps server `endedAt`, computes non-negative integer seconds duration via `Math.max(0, Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000))`, saves, and returns the completed `TimeLog`.
+    - `getActiveTimer`: Queries `{ userId, endedAt: null }` and returns the running log or `null`.
+    - `getTimeLogs`: Returns all user logs sorted newest first (`startedAt: -1`).
+    - `getTaskTimeLogs`: Verifies task ownership, retrieves task logs, and dynamically calculates `totalTrackedSeconds = SUM(duration)` for completed sessions.
+  - Built pure functional controller in `backend/src/controllers/timer.controller.ts` (`startTimer`, `stopTimer`, `getActiveTimer`, `getTimeLogs`, `getTaskTimeLogs`).
+  - Configured routes:
+    - `backend/src/routes/timer.routes.ts` (`GET /api/timer/active`)
+    - `backend/src/routes/timeLog.routes.ts` (`GET /api/time-logs`)
+    - `backend/src/routes/task.routes.ts` updated with `POST /:taskId/timer/start`, `POST /:taskId/timer/stop`, and `GET /:taskId/time-logs`.
+  - Mounted routes in `backend/src/app.ts` under `/api/timer` and `/api/time-logs`.
+  - Authored comprehensive automated test suite `backend/src/test_timer.ts` executing 47 assertions across 18 test suites against live MongoDB Atlas.
+- **Architectural Decisions & Concurrency Protection**:
+  - *Dual-Layer Concurrency Enforcement*:
+    1. Fast pre-flight check in memory via `TimeLog.findOne({ userId, endedAt: null })`.
+    2. MongoDB partial unique index `{ userId: 1 }, { unique: true, partialFilterExpression: { endedAt: null } }` preventing simultaneous race condition inserts. E11000 duplicate key error is intercepted and translated into HTTP 409 Conflict.
+  - *Server Timestamp Source of Truth*: Both `startedAt` and `endedAt` are generated on the server (`new Date()`). Client timestamps and durations are strictly rejected.
+  - *Normalized Total Time Calculation*: No `Task.totalTime` field exists. Total time is dynamically aggregated on demand from completed `TimeLog` records, preventing sync drift and denormalization anomalies.
+  - *Safe ID Isolation*: Non-owned tasks yield `404 Not Found` across all timer operations, preventing task existence leakage.
+  - *Milestone 3 Compatibility*: Verified that task deletion safeguard (`TimeLog.findOne({ taskId, userId, endedAt: null })` -> 409 Conflict) remains intact and functional.
+- **Files Changed**:
+  - `backend/src/types/timeLog.types.ts` (new domain types)
+  - `backend/src/models/timeLog.model.ts` (enhanced with partial unique index & query compound indexes)
+  - `backend/src/validators/timer.validator.ts` (new runtime validators)
+  - `backend/src/services/timer.service.ts` (new functional service)
+  - `backend/src/controllers/timer.controller.ts` (new functional controller)
+  - `backend/src/routes/timer.routes.ts` (new active timer route)
+  - `backend/src/routes/timeLog.routes.ts` (new time-logs route)
+  - `backend/src/routes/task.routes.ts` (bound start, stop, and task time-logs endpoints)
+  - `backend/src/app.ts` (mounted timer and time-log routes)
+  - `backend/package.json` (added `test:timer` script)
+  - `backend/src/test_timer.ts` (comprehensive automated test suite)
+  - `docs/API.md` (updated with Time Tracking API specifications)
+  - `docs/ARCHITECTURE.md` (updated with TimeLog indexing, concurrency, and lifecycle architecture)
+  - `docs/AI_DEVELOPMENT_LOG.md` (logged Milestone 4 activity)
+- **Verification Performed & Results**:
+  - TypeScript build (`npm run build`): **PASSED** with 0 errors.
+  - Timer test suite (`npm run test:timer`): **47 passed, 0 failed** against MongoDB Atlas.
+  - Auth regression suite (`npm run test:auth`): **45 passed, 0 failed**.
+  - Task regression suite (`npm run test:tasks`): **38 passed, 0 failed**.
+  - Class audit (`class\s+\w+`): **0 class declarations found across `backend/src/`**.
+  - Security audit: Confirmed zero secrets, credentials, or tokens logged or exposed.
+
