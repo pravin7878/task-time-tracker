@@ -8,7 +8,7 @@ import {
 } from '../types/task.types';
 import { createNotFoundError, createConflictError } from '../utils/errors';
 
-const formatTaskResponse = (task: TaskDocument): TaskResponse => ({
+export const formatTaskResponse = (task: TaskDocument): TaskResponse => ({
   id: task._id.toString(),
   title: task.title,
   description: task.description || '',

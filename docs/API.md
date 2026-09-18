@@ -401,34 +401,90 @@ All responses follow a standard envelope format:
 
 ---
 
-## 5. Daily Summary (`/api/summary/daily`)
+## 5. Daily Summary (`/api/summary`)
 
-### `GET /api/summary/daily`
-- **Description**: Compute productivity summary for a given day.
-- **Query Params (optional)**: `date` (YYYY-MM-DD), `tz` (timezone, e.g., `Asia/Kolkata` or `UTC`).
-- **Auth**: Required
+### `GET /api/summary/today`
+- **Description**: Returns an authoritative, timezone-aware productivity summary for the authenticated user's current calendar day.
+- **Auth**: Required (JWT cookie)
+- **Query Parameters**:
+  - `timezone` (string, **required**): A valid IANA timezone identifier representing the client's local timezone (e.g., `Asia/Kolkata`, `America/New_York`, `Europe/London`, `Australia/Sydney`, `UTC`).
 - **Responses**:
   - `200 OK`:
-```json
-{
-  "success": true,
-  "data": {
-    "date": "2026-09-17",
-    "totalTimeTrackedSeconds": 7200,
-    "tasksWorkedOnCount": 3,
-    "completedTasksCount": 2,
-    "inProgressTasksCount": 2,
-    "pendingTasksCount": 4,
-    "tasksWorkedOn": [
-      {
-        "taskId": "6643abc123...",
-        "title": "Follow up with UI Designer",
-        "timeSpentSeconds": 3600
-      }
-    ]
+  ```json
+  {
+    "success": true,
+    "data": {
+      "date": "2026-09-18",
+      "timezone": "Asia/Kolkata",
+      "totalTrackedTime": 7200,
+      "tasksWorkedOn": [
+        {
+          "taskId": "6643abc12345678901234567",
+          "title": "Follow up with UI Designer",
+          "timeSpentSeconds": 3600
+        },
+        {
+          "taskId": "6643def98765432109876543",
+          "title": "Implement Daily Summary API",
+          "timeSpentSeconds": 3600
+        }
+      ],
+      "completedTasks": [
+        {
+          "id": "6643abc12345678901234567",
+          "title": "Follow up with UI Designer",
+          "description": "Send Slack message regarding wireframe delivery",
+          "status": "completed",
+          "createdAt": "2026-09-18T10:00:00.000Z",
+          "updatedAt": "2026-09-18T11:00:00.000Z"
+        }
+      ],
+      "inProgressTasks": [
+        {
+          "id": "6643def98765432109876543",
+          "title": "Implement Daily Summary API",
+          "description": "Build timezone-aware endpoint",
+          "status": "in_progress",
+          "createdAt": "2026-09-18T11:00:00.000Z",
+          "updatedAt": "2026-09-18T11:30:00.000Z"
+        }
+      ],
+      "pendingTasks": []
+    }
   }
-}
-```
+  ```
+  - `400 Bad Request` (Missing parameter):
+  ```json
+  {
+    "success": false,
+    "message": "Validation failed",
+    "errors": {
+      "timezone": "Timezone parameter is required"
+    }
+  }
+  ```
+  - `400 Bad Request` (Invalid timezone identifier):
+  ```json
+  {
+    "success": false,
+    "message": "Validation failed",
+    "errors": {
+      "timezone": "Invalid timezone parameter. Must be a valid IANA timezone identifier (e.g., 'Asia/Kolkata', 'America/New_York')."
+    }
+  }
+  ```
+  - `401 Unauthorized`: Unauthenticated request.
+
+### Core Calculation & Timezone Semantics:
+- **Server UTC Authoritative**: All timestamps in MongoDB (`startedAt`, `endedAt`, `createdAt`) are stored as UTC instants (`Date` objects).
+- **Timezone Boundary Determination**: The client's `timezone` parameter determines the start of the local calendar day (00:00:00.000 local) and the start of the next local day (00:00:00.000 of tomorrow local). These boundaries are converted to UTC instants: `[startOfDay, startOfNextDay)`.
+- **Session Overlap & Cross-Midnight Splitting**: Tracked time is calculated purely based on the overlap between each session and the local day boundaries:
+  $$\text{overlapStart} = \max(\text{sessionStart}, \text{startOfDay})$$
+  $$\text{overlapEnd} = \min(\text{sessionEnd}, \text{startOfNextDay})$$
+  $$\text{duration} = \max\left(0, \left\lfloor\frac{\text{overlapEnd} - \text{overlapStart}}{1000}\right\rfloor\right)$$
+  Sessions crossing midnight (e.g., 23:30 to 00:30) are partitioned without double-counting (30 minutes credited to Day 1, 30 minutes credited to Day 2).
+- **Active Timer Handling**: If a timer is currently running (`endedAt: null`), its temporary end is assumed to be the current instant (`new Date()`). Its elapsed seconds today are included in `totalTrackedTime` and its task is included in `tasksWorkedOn`. The persisted `TimeLog` in MongoDB is **never** modified for summary generation.
+- **Strict Data Isolation**: All task lists and session logs are strictly filtered by `userId: req.user.id`.
 
 ---
 

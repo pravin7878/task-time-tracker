@@ -7,6 +7,7 @@ import authRoutes from './routes/auth.routes';
 import taskRoutes from './routes/task.routes';
 import timerRoutes from './routes/timer.routes';
 import timeLogRoutes from './routes/timeLog.routes';
+import summaryRoutes from './routes/summary.routes';
 import { errorHandler } from './middleware/error.middleware';
 
 const app = express();
@@ -40,6 +41,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/timer', timerRoutes);
 app.use('/api/time-logs', timeLogRoutes);
+app.use('/api/summary', summaryRoutes);
 
 // 404 handler for unknown API routes
 app.use((_req: Request, res: Response) => {

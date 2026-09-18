@@ -235,3 +235,70 @@ This log records prompts, architectural decisions, implementations, and verifica
   - Class audit (`class\s+\w+`): **0 class declarations found across `backend/src/`**.
   - Security audit: Confirmed zero secrets, credentials, or tokens logged or exposed.
 
+---
+
+## Milestone 5: Complete Daily Summary API
+
+- **Date**: 2026-09-18
+- **Objective**: Implement authenticated, timezone-aware daily activity summary endpoint (`GET /api/summary/today?timezone=[IANA_ZONE]`) using 100% functional architecture, accurate IANA timezone boundary calculation, cross-midnight session partitioning, non-mutating active timer inclusion, task status categorization, and strict user data isolation.
+- **Prompt Used**:
+  > "You are a senior backend engineer working on the existing Full Stack Developer take-home assignment.
+  > We have completed and verified: Milestone 1, 2, 3, 4.
+  > Your task is to implement ONLY: MILESTONE 5 — DAILY SUMMARY API.
+  > The goal is to provide an authenticated, timezone-aware API endpoint that summarizes the current user's activity for their current calendar day.
+  > 1. First: Inspect the existing codebase (reuse models, middleware, utilities; do not introduce classes or duplicate models).
+  > 2. Functional Architecture (functional controller & service, thin controller, services contain summary business logic).
+  > 3. Daily Summary Endpoint (GET /api/summary/today, requireAuth, req.user.id).
+  > 4. Timezone Requirement (validate IANA identifier via timezone library, do not hardcode or use fixed offsets, require timezone query param).
+  > 5. Defining 'Today' (resolve local calendar date in requested timezone, compute start of day and start of next day, convert to UTC instants).
+  > 6. What Summary Must Contain (date, timezone, totalTrackedTime, tasksWorkedOn, completedTasks, pendingTasks, inProgressTasks).
+  > 7. Tasks Worked On & Cross-Midnight Sessions (overlap logic: max(start, startOfDay) to min(end, startOfNextDay); partition without duplicate duration).
+  > 8. Total Tracked Time (sum of session overlaps today in integer seconds).
+  > 9. Completed / Pending / In-Progress Tasks (user-scoped Task records grouped by status).
+  > 10. Active Timer (include elapsed portion today dynamically without mutating stored TimeLog).
+  > 11. Cross-Midnight Sessions (test completed and active sessions spanning midnight).
+  > 12. Data Isolation (all queries scoped to req.user.id).
+  > 13. Invalid Timezone (400 Bad Request with meaningful validation envelope).
+  > 14. Testing, documentation, and verification..."
+- **Implementation Summary**:
+  - Added dependency `luxon` (and `@types/luxon`) for reliable, DST-aware, and IANA-compliant timezone computations.
+  - Defined domain types in `backend/src/types/summary.types.ts` (`TaskWorkedOnSummary`, `DailySummaryResponse`).
+  - Created runtime validator in `backend/src/validators/summary.validator.ts` (`validateSummaryTimezone` validating presence and IANA zone validity via `IANAZone.isValidZone`).
+  - Created pure functional service in `backend/src/services/summary.service.ts`:
+    - `calculateDayBoundaries`: Resolves local calendar date `YYYY-MM-DD`, start of day (00:00:00.000 local), and start of next day (00:00:00.000 tomorrow local) as UTC `Date` instants.
+    - `getDailySummary`: Retrieves user-scoped tasks, groups them by status (`completedTasks`, `pendingTasks`, `inProgressTasks`), queries overlapping `TimeLog` sessions, calculates exact overlap durations (including active session elapsed seconds), builds `tasksWorkedOn` with task titles, and returns the response.
+  - Created pure functional controller in `backend/src/controllers/summary.controller.ts` (`getTodaySummary`).
+  - Created route router in `backend/src/routes/summary.routes.ts` protecting `GET /today` with `requireAuth`.
+  - Mounted `/api/summary` in `backend/src/app.ts`.
+  - Exported `formatTaskResponse` in `backend/src/services/task.service.ts` for unified task serialization.
+  - Added `"test:summary": "tsx src/test_summary.ts"` to `backend/package.json`.
+  - Created automated test suite `backend/src/test_summary.ts` covering 56 assertions across 14 test scenarios against MongoDB Atlas.
+- **Architectural Decisions**:
+  - *Reliable Timezone Computation*: Adopted Luxon (`IANAZone`) to ensure complete compliance with global daylight saving time shifts, historical changes, and leap days, avoiding naive fixed-offset arithmetic.
+  - *Cross-Midnight Overlap Splitting*: Overlap duration is computed as $\max(0, \lfloor(\min(\text{end}, \text{startOfNextDay}) - \max(\text{start}, \text{startOfDay})) / 1000\rfloor)$, ensuring cross-midnight sessions are partitioned accurately without duplicate counting.
+  - *Non-Mutating Active Timer Handling*: Running timers (`endedAt: null`) have their elapsed portion today computed against `new Date()`. The database record is never modified during summary calculations.
+  - *Dynamic Normalization*: Avoided storing any cumulative total time on `Task` documents. All totals are derived dynamically on demand.
+  - *Strict User Isolation*: All queries strictly filter by `userId: req.user.id`.
+- **Files Changed**:
+  - `backend/src/types/summary.types.ts` (new domain types)
+  - `backend/src/validators/summary.validator.ts` (new timezone validator)
+  - `backend/src/services/summary.service.ts` (new functional service)
+  - `backend/src/controllers/summary.controller.ts` (new functional controller)
+  - `backend/src/routes/summary.routes.ts` (new summary routes)
+  - `backend/src/services/task.service.ts` (exported `formatTaskResponse`)
+  - `backend/src/app.ts` (mounted `/api/summary`)
+  - `backend/package.json` (added dependencies and `test:summary` script)
+  - `backend/src/test_summary.ts` (comprehensive automated test suite)
+  - `docs/API.md` (updated with Daily Summary API specification)
+  - `docs/ARCHITECTURE.md` (updated with Daily Summary architecture details)
+  - `docs/AI_DEVELOPMENT_LOG.md` (logged Milestone 5 activity)
+- **Verification Performed & Results**:
+  - TypeScript build (`npm run build`): **PASSED** with 0 errors.
+  - Summary test suite (`npm run test:summary`): **56 passed, 0 failed** against MongoDB Atlas.
+  - Auth regression suite (`npm run test:auth`): **45 passed, 0 failed**.
+  - Task regression suite (`npm run test:tasks`): **38 passed, 0 failed**.
+  - Timer regression suite (`npm run test:timer`): **47 passed, 0 failed**.
+  - Class audit (`class\s+\w+`): **0 class declarations found across `backend/src/`**.
+  - Security audit: Confirmed zero secrets, credentials, or tokens logged or exposed.
+
+

@@ -176,9 +176,24 @@ The system enforces the single-active-timer constraint via a **dual-layer defens
 - **Active Timer Deletion Protection**: Before a task is deleted, the service queries `TimeLog.findOne({ taskId, userId: req.user.id, endedAt: null })`. If an active timer is running, the deletion is rejected with `409 Conflict` and message `"Cannot delete a task while its timer is running."`.
 
 ### 4.5 Timezone-Aware Daily Summary
-- The daily summary endpoint accepts an optional `date` (YYYY-MM-DD) and client `timezone` (e.g. `Asia/Kolkata`, `UTC`).
-- The backend computes the UTC range corresponding to the user's local day boundaries (`[startOfDay, endOfDay]`).
-- Time logs overlapping the day are aggregated using MongoDB `$match` and `$group` pipelines to calculate total duration and unique tasks worked on.
+- **Endpoint**: `GET /api/summary/today?timezone=[IANA_TIMEZONE]`
+- **Timezone Boundary Calculation**:
+  - The client provides a validated IANA timezone identifier (e.g. `Asia/Kolkata`, `America/New_York`, `Europe/London`).
+  - Using Luxon, the service resolves the user's current local calendar date (`YYYY-MM-DD`) and computes the exact UTC instants corresponding to the start of that local day (00:00:00.000) and the start of the next local day (00:00:00.000 of tomorrow): `[startOfDay, startOfNextDay)`.
+  - Native IANA timezone evaluation natively handles daylight saving transitions (23-hour or 25-hour days) and historical offset changes.
+- **TimeLog Overlap Calculation & Cross-Midnight Splitting**:
+  - The service queries TimeLogs where `startedAt < startOfNextDay` and (`endedAt > startOfDay` or `endedAt == null`), scoped strictly to `userId: req.user.id`.
+  - For each session:
+    $$\text{overlapStart} = \max(\text{startedAt}, \text{startOfDay})$$
+    $$\text{overlapEnd} = \min(\text{endedAt} \mathrel{?} \text{endedAt} : \text{now}, \text{startOfNextDay})$$
+    $$\text{duration} = \max\left(0, \left\lfloor\frac{\text{overlapEnd} - \text{overlapStart}}{1000}\right\rfloor\right)$$
+  - This guarantees sessions crossing midnight are partitioned accurately without duplicate time or omitted time.
+- **Active Session Inclusion**:
+  - If a user currently has an active timer (`endedAt == null`), its elapsed portion today is calculated up to the current instant (`now`) and included in both `totalTrackedTime` and `tasksWorkedOn`.
+  - The persisted `TimeLog` document in MongoDB is **never** mutated to calculate the summary (`endedAt` remains `null`, `duration` remains `null`).
+- **Data Normalization & Authoritative Timestamps**:
+  - The `Task` model intentionally does not maintain a cumulative `totalTime` field. All daily and task totals are derived on demand from `TimeLog` session intervals, guaranteeing complete consistency and zero denormalization anomalies.
+  - The client's timezone is used exclusively to establish the local calendar day window; the timestamps stored in MongoDB remain server-authoritative UTC instants.
 
 ---
 
