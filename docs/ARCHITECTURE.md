@@ -28,26 +28,41 @@ The system is structured as a decoupled full-stack TypeScript application:
 
 ---
 
-## 2. Backend Layered Architecture
+## 2. Backend Layered Architecture (Functional Approach)
 
-The backend strictly separates concerns into clean layers:
+The backend uniformly adopts a pure **functional programming approach** for application-layer code (controllers, services, middleware, validators, and utilities) instead of class-based singletons or instantiated service objects:
+
+```
+Routes (Router binding)
+  ↓
+Middleware functions (requireAuth, errorHandler)
+  ↓
+Controller functions (register, login, logout, me)
+  ↓
+Service functions (register, login, getCurrentUser)
+  ↓
+Model operations (Mongoose schemas & models)
+  ↓
+MongoDB Atlas
+```
 
 1. **Routes (`/src/routes`)**:
-   - Define URL patterns and bind HTTP verbs.
-   - Attach route-level middleware (e.g., authentication, rate limiting).
+   - Define URL patterns and bind HTTP verbs directly to functional controllers.
+   - Attach route-level middleware functions (e.g., `requireAuth`).
 2. **Middleware (`/src/middleware`)**:
-   - `auth.middleware.ts`: Parses HTTP-only cookies, validates JWT, attaches `req.user`.
-   - `error.middleware.ts`: Centralized error catching, converts domain errors to standardized JSON responses.
+   - `auth.middleware.ts`: Pure function parsing HTTP-only cookies, validating JWT, attaching `req.user`.
+   - `error.middleware.ts`: Centralized error catching function mapping domain errors to standard JSON responses.
 3. **Controllers (`/src/controllers`)**:
-   - Thin request handlers.
-   - Extract parameters, run runtime input validators, invoke services, and return standard JSON envelopes.
+   - Exported pure async functions responsible strictly for HTTP concerns (parsing request bodies, running runtime validators, invoking services, setting HTTP-only cookies, returning standard JSON envelopes).
 4. **Services (`/src/services`)**:
-   - Core domain business logic.
-   - Enforce single active timer constraint, compute durations, perform database aggregations, and enforce resource ownership.
+   - Exported pure async functions containing domain business logic (database operations, bcrypt hashing, JWT issuance, domain error throwing).
+   - Stateless and independently testable without instantiating class objects.
 5. **Models (`/src/models`)**:
-   - Mongoose schemas with indexing, strict validation, and TypeScript types.
+   - Standard Mongoose schemas and models (`new Schema(...)`, `model(...)`) with indexing, validation, and strict types.
 6. **Validators (`/src/validators`)**:
-   - Explicit runtime validation functions (no Zod) to validate HTTP payloads.
+   - Pure runtime validation functions (no Zod) validating HTTP payloads.
+7. **Custom Errors (`/src/utils/errors.ts`)**:
+   - Pure functional error factories (`createAppError`, `createBadRequestError`, `createUnauthorizedError`, `createForbiddenError`, `createNotFoundError`, `createConflictError`) with an `isAppError` TypeScript type guard. Eliminates all class declarations while preserving stack traces and typed status codes.
 
 ---
 

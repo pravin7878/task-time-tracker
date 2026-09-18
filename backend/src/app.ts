@@ -1,8 +1,10 @@
-import express, { Request, Response, NextFunction } from 'express';
+import express, { Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { env } from './config/env';
+import authRoutes from './routes/auth.routes';
+import { errorHandler } from './middleware/error.middleware';
 
 const app = express();
 
@@ -30,6 +32,9 @@ app.get('/api/health', (_req: Request, res: Response) => {
   });
 });
 
+// API Routes
+app.use('/api/auth', authRoutes);
+
 // 404 handler for unknown API routes
 app.use((_req: Request, res: Response) => {
   res.status(404).json({
@@ -39,13 +44,7 @@ app.use((_req: Request, res: Response) => {
 });
 
 // Centralized error handler
-app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  const isDev = env.NODE_ENV === 'development';
-  res.status(500).json({
-    success: false,
-    message: isDev ? err.message : 'Internal server error',
-    ...(isDev && { stack: err.stack }),
-  });
-});
+app.use(errorHandler);
 
 export default app;
+
