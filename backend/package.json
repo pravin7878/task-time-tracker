@@ -5,7 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "nodemon src/server.ts",
-    "build": "npm ci && tsc",
+    "build": "npm install && tsc",
     "start": "node dist/server.js",
     "test:auth": "tsx src/test_auth.ts",
     "test:tasks": "tsx src/test_tasks.ts",

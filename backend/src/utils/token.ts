@@ -22,7 +22,8 @@ export const verifyToken = (token: string): TokenPayload | null => {
 };
 
 export const setAuthCookie = (res: Response, token: string): void => {
-  const isProduction = env.NODE_ENV === 'production';
+  const isProduction =
+    env.NODE_ENV === 'production' || process.env.RENDER === 'true';
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
     secure: isProduction,
@@ -33,7 +34,8 @@ export const setAuthCookie = (res: Response, token: string): void => {
 };
 
 export const clearAuthCookie = (res: Response): void => {
-  const isProduction = env.NODE_ENV === 'production';
+  const isProduction =
+    env.NODE_ENV === 'production' || process.env.RENDER === 'true';
   res.clearCookie(COOKIE_NAME, {
     httpOnly: true,
     secure: isProduction,

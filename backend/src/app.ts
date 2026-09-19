@@ -12,12 +12,50 @@ import aiRoutes from './routes/ai.routes';
 import { errorHandler } from './middleware/error.middleware';
 
 const app = express();
+// Trust reverse proxy headers on Render/cloud hosting for secure cookie and protocol detection
+app.set('trust proxy', 1);
 
 // Security and utility middleware
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
+
+// Normalize allowed origins from FRONTEND_URL and local development
+const getAllowedOrigins = (): string[] => {
+  const defaultOrigins = [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:5173',
+  ];
+
+  const configuredOrigins = env.FRONTEND_URL
+    ? env.FRONTEND_URL.split(',')
+        .map((url) => url.trim().replace(/^["']|["']$/g, '').replace(/\/+$/, ''))
+        .filter(Boolean)
+    : [];
+
+  return Array.from(new Set([...defaultOrigins, ...configuredOrigins]));
+};
+
 app.use(
   cors({
-    origin: env.FRONTEND_URL.split(','),
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g. server-to-server, mobile, curl)
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      const allowedOrigins = getAllowedOrigins();
+      const normalizedOrigin = origin.replace(/\/+$/, '');
+
+      if (allowedOrigins.includes(normalizedOrigin)) {
+        return callback(null, true);
+      }
+
+      return callback(null, false);
+    },
     credentials: true,
   })
 );
