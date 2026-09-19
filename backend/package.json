@@ -10,9 +10,11 @@
     "test:auth": "tsx src/test_auth.ts",
     "test:tasks": "tsx src/test_tasks.ts",
     "test:timer": "tsx src/test_timer.ts",
-    "test:summary": "tsx src/test_summary.ts"
+    "test:summary": "tsx src/test_summary.ts",
+    "test:ai": "tsx src/test_ai.ts"
   },
   "dependencies": {
+    "@google/genai": "^2.23.0",
     "bcrypt": "^5.1.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",

@@ -488,26 +488,64 @@ All responses follow a standard envelope format:
 
 ---
 
-## 6. Optional AI Enhancement (`/api/ai/enhance-task`)
+## 6. AI Task Suggestions (`/api/ai`)
 
-### `POST /api/ai/enhance-task`
-- **Description**: Takes natural language task input and returns AI-suggested title and description.
-- **Auth**: Required
+### `POST /api/ai/task-suggestion`
+- **Description**: Accepts a user's natural language task input and uses Google Gemini 3.6 Flash (`@google/genai`) to generate an improved task title and structured description. Suggestion only: does NOT create or modify tasks in MongoDB.
+- **Auth**: Required (`requireAuth` middleware via HttpOnly cookie or `Authorization: Bearer <token>`)
+- **Headers**:
+  - `Content-Type: application/json`
+  - `Cookie: token=<jwt>` or `Authorization: Bearer <token>`
 - **Request Body**:
 ```json
 {
-  "rawInput": "follow up with designer"
+  "input": "Need to prepare monthly sales report and send it to manager"
 }
 ```
+- **Validation Rules**:
+  - Request body must be a JSON object.
+  - `input` is required and must be a string.
+  - Whitespace is trimmed; empty input is rejected with HTTP 400.
+  - Maximum input length is 1000 characters; longer input rejected with HTTP 400.
+  - No `userId` is accepted from the body.
 - **Responses**:
   - `200 OK`:
 ```json
 {
   "success": true,
   "data": {
-    "suggestedTitle": "Follow up with UI Designer",
-    "suggestedDescription": "Send a Slack message to confirm wireframe delivery status."
+    "title": "Prepare Monthly Sales Report",
+    "description": "Prepare the monthly sales report and send it to the manager."
   }
 }
 ```
-  - `503 Service Unavailable`: AI service temporarily unavailable (fallback to manual entry).
+  - `400 Bad Request` (Missing or invalid input):
+```json
+{
+  "success": false,
+  "message": "Validation failed",
+  "errors": {
+    "input": "Task input cannot be empty"
+  }
+}
+```
+  - `401 Unauthorized`: Missing or invalid authentication token.
+```json
+{
+  "success": false,
+  "message": "Authentication required"
+}
+```
+  - `503 Service Unavailable`: Gemini provider failure, unconfigured API key, or malformed AI output.
+```json
+{
+  "success": false,
+  "message": "AI suggestion service is temporarily unavailable"
+}
+```
+
+### Core Architecture & Security Principles:
+- **Backend-Only Security**: `GEMINI_API_KEY` is maintained strictly on the backend and is never exposed to the frontend or sent over the wire.
+- **Dynamic Model Configuration**: Reads from `process.env.GEMINI_MODEL` (default: `gemini-3.6-flash`), never hard-coded.
+- **Suggestion Only (Zero Side Effects)**: Gemini suggestions never automatically create tasks, update statuses, start/stop timers, or persist records into MongoDB.
+- **Structured JSON Output**: Utilizes `@google/genai` JSON schema enforcement (`responseSchema`), with application-level parsing, type verification, and length bounds sanitization.

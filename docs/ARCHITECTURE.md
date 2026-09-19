@@ -455,6 +455,77 @@ The Daily Summary Dashboard (`/app`) aggregates the user's daily productivity me
   - Creating, updating, or deleting a task (`useCreateTask`, `useUpdateTask`, `useDeleteTask`) invalidates `['summary']`.
 - Users navigating back to the dashboard immediately see updated time totals, active timer callouts, and task counts without manual refreshing.
 
+---
+
+### 6.7 Gemini 3.6 Flash AI Subsystem Architecture (Milestone 10 Part A)
+
+The AI Subsystem provides natural-language task improvement via Google Gemini 3.6 Flash without introducing auto-creation side effects or client exposure.
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                        Authenticated Client                            │
+│           POST /api/ai/task-suggestion { "input": "..." }              │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │
+                                    ▼
+                         [requireAuth Middleware]
+                                    │
+                                    ▼
+                       [ai.controller.ts: getTaskSuggestion]
+                                    │
+                                    ▼
+                       [ai.validator.ts: validateTaskSuggestionInput]
+                         (string, trimmed, 1-1000 chars)
+                                    │
+                                    ▼
+                       [ai.service.ts: generateTaskSuggestion]
+                         (lazy client, dynamic process.env.GEMINI_MODEL)
+                                    │
+                                    ▼
+                         @google/genai SDK Call
+                         (responseSchema: { title, description })
+                                    │
+                                    ▼
+                        Structured JSON Validation
+                         (bounds check, non-empty)
+                                    │
+                                    ▼
+                 200 OK: { success: true, data: { title, description } }
+```
+
+#### 1. Backend-Only Security & Isolation
+- **No Client Key Exposure**: `GEMINI_API_KEY` is loaded exclusively inside Node.js via `env.ts` / `process.env`. It is never delivered to the client, never present in Vite frontend builds, and never prefixed with `VITE_`.
+- **Dynamic Model Resolution**: The model identifier is read at runtime from `process.env.GEMINI_MODEL` (default: `gemini-3.6-flash`). It is not hardcoded inside controllers or services.
+- **Authentication**: All AI suggestion requests require a valid JWT token (`requireAuth`).
+
+#### 2. Functional Architecture
+- Fully follows the established functional paradigm:
+  `Route (ai.routes.ts) → Middleware (requireAuth) → Controller (ai.controller.ts) → Service (ai.service.ts) → @google/genai SDK`.
+- No application-layer classes or heavy ORM wrappers.
+- Lazy client initialization ensures importing modules does not crash or require an API key during unit tests.
+
+#### 3. Structured Output & Post-Response Validation
+- Gemini is configured with `responseMimeType: 'application/json'` and a strict JSON schema:
+  - `title`: string (concise, actionable, preferably 3-8 words)
+  - `description`: string (clear, structured context/steps)
+- The model prompt strictly forbids generating `userId`, `taskId`, `status`, timers, or database attributes.
+- Post-response safety pipeline:
+  1. Parses raw JSON text safely without throwing unhandled exceptions.
+  2. Verifies both `title` and `description` exist and are non-empty strings.
+  3. Enforces length bounds (title $\le 200$, description $\le 2000$).
+  4. Returns sanitized `TaskSuggestionData`.
+
+#### 4. Suggestion-Only Boundary (Zero Side Effects)
+- The endpoint purely returns suggested content.
+- It does **NOT** create a task document, modify task status, alter timers, or save suggestions into MongoDB.
+- Task persistence remains entirely under the user's manual discretion.
+
+#### 5. Resilient Error Handling
+- `400 Bad Request`: Missing body, empty input, non-string, or input $> 1000$ characters.
+- `401 Unauthorized`: Unauthenticated request.
+- `503 Service Unavailable`: Upstream Gemini provider failure, unconfigured API key, quota limit, or malformed AI response.
+- Raw SDK error details, internal stack traces, and API keys are never leaked to API clients.
+
 
 
 

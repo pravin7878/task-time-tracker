@@ -10,6 +10,7 @@ export interface EnvConfig {
   JWT_EXPIRES_IN: string;
   FRONTEND_URL: string;
   GEMINI_API_KEY?: string;
+  GEMINI_MODEL: string;
 }
 
 export const env: EnvConfig = {
@@ -20,4 +21,5 @@ export const env: EnvConfig = {
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:5173',
   GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+  GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
 };

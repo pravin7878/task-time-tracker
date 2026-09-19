@@ -613,6 +613,65 @@ This log records prompts, architectural decisions, implementations, and verifica
     - [6] Active timer elapsed time included in summary `totalTrackedTime`: PASSED
     - [7] Invalid timezone rejected with 400 Bad Request: PASSED
 
+---
+
+## Milestone 10 (Part A): Gemini 3.6 Flash Backend Integration
+
+- **Date**: 2026-09-19
+- **Objective**: Implement the backend-only Gemini 3.6 Flash integration (`POST /api/ai/task-suggestion`). Accept a user's natural language task input and return an improved task title and structured description via the official `@google/genai` SDK using structured JSON schema output, without modifying any frontend code or auto-creating tasks.
+- **Prompt Used**:
+  > "Implement Part A of Milestone 10 — Gemini 3.6 Flash Backend Integration.
+  > IMPORTANT: This milestone is BACKEND ONLY. Do NOT modify: frontend/, TaskFormModal, frontend hooks, frontend services, frontend pages, frontend UI.
+  > GOAL: Add an optional Gemini-powered backend API that accepts a user's natural-language task input and returns an improved task title and structured description. Gemini must only suggest/improve task content. It must NOT create tasks automatically.
+  > 1. GEMINI SETUP: Official @google/genai SDK installed only in backend. Use Gemini 3.6 Flash. Read process.env.GEMINI_MODEL.
+  > 2. API ENDPOINT: POST /api/ai/task-suggestion (authenticated).
+  > 3. INPUT VALIDATION: Pure functional, string, trimmed, non-empty, max 1000 chars, no Zod.
+  > 4. GEMINI SERVICE: Route -> Auth -> Controller -> AI Service -> Gemini API.
+  > 5. STRUCTURED OUTPUT: responseSchema with title and description.
+  > 6. ERROR HANDLING: 400, 401, 503.
+  > 7. SECURITY: Backend-only key, no task auto-creation, no DB storage."
+- **Key Architectural Decisions**:
+  - **Strict Backend-Only Isolation**: `GEMINI_API_KEY` is kept exclusively on the backend in `backend/.env` and `process.env`. Zero exposure to frontend or Vite environment variables.
+  - **Dynamic Model Configuration**: Reads from `process.env.GEMINI_MODEL` (fallback `gemini-3.6-flash`). Model name is never hardcoded inside controllers or services.
+  - **Suggestion Only (Zero Side Effects)**: Gemini suggestions return `{ title, description }` purely as advice to the client. The endpoint does not write to MongoDB, does not alter task status, does not start timers, and does not accept `userId` from the request body.
+  - **Type-Safe Functional Service & Lazy Client**: Defined `MinimalGeminiClient` interface and lazy initialization factory `getGeminiClient()` so importing modules does not require an API key. Implemented `setGeminiClientForTesting` for 100% type-safe mock injection without `any`.
+  - **Structured Schema & Post-Response Validation**: Configured `@google/genai` with `responseMimeType: 'application/json'` and `responseSchema`. Safely parses JSON and validates non-empty strings with strict length boundaries (title $\le 200$, description $\le 2000$).
+  - **Automated Mock Testing**: Built `backend/src/test_ai.ts` with 9 exhaustive scenarios mocking the Gemini client to avoid real API calls or live API keys in CI/CD.
+- **Files Created**:
+  - `backend/src/types/ai.types.ts`
+  - `backend/src/validators/ai.validator.ts`
+  - `backend/src/services/ai.service.ts`
+  - `backend/src/controllers/ai.controller.ts`
+  - `backend/src/routes/ai.routes.ts`
+  - `backend/src/test_ai.ts`
+- **Files Modified**:
+  - `backend/package.json` (added `@google/genai`, `"test:ai"`)
+  - `backend/package-lock.json`
+  - `backend/.env.example` (added `GEMINI_API_KEY=`, `GEMINI_MODEL=gemini-3.6-flash`)
+  - `backend/src/config/env.ts` (added `GEMINI_MODEL`)
+  - `backend/src/app.ts` (mounted `/api/ai`)
+  - `docs/ARCHITECTURE.md` (added Section 6.7 Gemini 3.6 Flash AI Subsystem)
+  - `docs/API.md` (documented `POST /api/ai/task-suggestion`)
+  - `docs/AI_DEVELOPMENT_LOG.md` (documented Milestone 10 Part A)
+- **Verification Performed & Results**:
+  - Backend TypeScript compilation (`npm run build` in `backend`): **PASSED** with 0 errors (`tsc`).
+  - Automated AI test suite (`npm run test:ai`): **28 PASSED, 0 FAILED**
+    - [1] Unauthenticated request -> 401 Unauthorized
+    - [2] Missing input in body -> 400 Bad Request
+    - [3] Empty input string -> 400 Bad Request
+    - [4] Invalid input types (number, array) -> 400 Bad Request
+    - [5] Input exceeding 1000 characters -> 400 Bad Request
+    - [6] Valid authenticated request -> 200 OK with structured `{ title, description }`
+    - [7] Malformed Gemini responses (non-JSON, missing field, empty field) -> 503 Service Unavailable
+    - [8] Gemini provider/API failure -> 503 Service Unavailable
+    - [9] Direct service function with dynamic model resolution
+  - All 4 backend regression test suites:
+    - `npm run test:auth`: **45 PASSED, 0 FAILED**
+    - `npm run test:tasks`: **38 PASSED, 0 FAILED**
+    - `npm run test:timer`: **47 PASSED, 0 FAILED**
+    - `npm run test:summary`: **56 PASSED, 0 FAILED**
+  - Git status verification: **Strictly 0 changes under `frontend/`**.
+
 
 
 
