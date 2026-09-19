@@ -301,4 +301,70 @@ This log records prompts, architectural decisions, implementations, and verifica
   - Class audit (`class\s+\w+`): **0 class declarations found across `backend/src/`**.
   - Security audit: Confirmed zero secrets, credentials, or tokens logged or exposed.
 
+---
+
+## Milestone 6: Complete Frontend Authentication + Basic Home
+
+- **Date**: 2026-09-19
+- **Objective**: Implement complete, functional, end-to-end frontend authentication (`/login`, `/register`, `/app`) using React 18, Vite, TypeScript, Tailwind CSS, TanStack Query, React Hook Form, and existing backend authentication APIs with HTTP-only cookie session management.
+- **Prompt Used**:
+  > "You are a senior frontend engineer working on the existing Full Stack Developer take-home assignment.
+  > IMPORTANT CHANGE OF IMPLEMENTATION STRATEGY:
+  > We have decided NOT to build the frontend as a collection of placeholder pages and then integrate functionality later.
+  > Instead, from this point forward, each milestone should implement a complete, functional user-facing feature using the already completed backend APIs.
+  > Now implement: MILESTONE 6 — COMPLETE FRONTEND AUTHENTICATION + BASIC HOME.
+  > 1. Inspect existing codebase and backend auth contracts.
+  > 2. Authentication API (integrate existing /register, /login, /logout, /me).
+  > 3. HTTP-only Cookie Authentication (withCredentials: true, zero tokens in localStorage/sessionStorage).
+  > 4. Authentication State (TanStack Query, source of truth /api/auth/me, useAuth hook).
+  > 5. Login Page (React Hook Form, validation, error handling, redirect to /app).
+  > 6. Register Page (React Hook Form, validation, auto-login, redirect to /app).
+  > 7. Logout (call backend /auth/logout, clear cache, redirect to /login).
+  > 8. Protected Route (ProtectedRoute, PublicRoute guard).
+  > 9. Basic Authenticated Home Page (/app, welcome user, overview cards, logout).
+  > 10. Responsive Design, UI styling with Tailwind CSS & React Icons..."
+- **Implementation Summary**:
+  - Configured `frontend/vite.config.ts` with development proxy for `/api` pointing to `http://localhost:8080`.
+  - Created `frontend/.env` with `VITE_API_URL=http://localhost:8080/api`.
+  - Authored TypeScript interfaces in `frontend/src/types/auth.types.ts` (`User`, `LoginFormData`, `RegisterFormData`, `ApiResponse`, `AuthData`).
+  - Implemented centralized Axios client in `frontend/src/lib/api.ts` with `withCredentials: true` and standardized error extraction (`extractApiError`).
+  - Implemented authentication service in `frontend/src/services/auth.service.ts` (`getCurrentUser`, `login`, `register`, `logout`).
+  - Built custom `useAuth` hook in `frontend/src/hooks/useAuth.ts` leveraging TanStack Query (`queryKey: ['auth', 'me']`) with mutations for login, register, and logout.
+  - Implemented UI components:
+    - `LoadingSpinner.tsx`: Accessible loading indicator for auth transitions.
+    - `ProtectedRoute.tsx`: Route guard ensuring only authenticated users can access `/app`.
+    - `PublicRoute.tsx`: Guest guard redirecting authenticated users away from `/login` and `/register` directly to `/app`.
+    - `LoginPage.tsx`: Polished login form with React Hook Form, accessible labels, input validation, server error banner, and redirect preservation.
+    - `RegisterPage.tsx`: Polished registration form with name, email, password, and confirm password validation, auto-session establishment, and redirect to `/app`.
+    - `HomePage.tsx`: Authenticated home page at `/app` displaying user greeting, user avatar badge, explanation of the productivity app, call to action, and logout button.
+  - Configured routing and query client provider in `frontend/src/App.tsx`.
+- **Architectural Decisions**:
+  - *No Client Token Storage*: Avoided all client-side token storage in `localStorage` or `sessionStorage`. All authentication relies on secure HTTP-only cookies with `withCredentials: true`.
+  - *Single Source of Truth*: `GET /api/auth/me` is the authoritative source for session state. Browser refresh automatically checks `/api/auth/me` to resume the authenticated session.
+  - *Zero Placeholder Auth*: All authentication interacts directly with the production-ready Node.js backend.
+- **Files Changed**:
+  - `frontend/vite.config.ts` (configured proxy)
+  - `frontend/.env` (created environment config)
+  - `frontend/src/vite-env.d.ts` (added Vite client typings)
+  - `frontend/src/types/auth.types.ts` (created auth domain types)
+  - `frontend/src/lib/api.ts` (created Axios client with credentials)
+  - `frontend/src/services/auth.service.ts` (created auth service layer)
+  - `frontend/src/hooks/useAuth.ts` (created TanStack Query useAuth hook)
+  - `frontend/src/components/common/LoadingSpinner.tsx` (created spinner component)
+  - `frontend/src/routes/ProtectedRoute.tsx` (created protected route guard)
+  - `frontend/src/routes/PublicRoute.tsx` (created guest route guard)
+  - `frontend/src/pages/LoginPage.tsx` (created login page)
+  - `frontend/src/pages/RegisterPage.tsx` (created registration page)
+  - `frontend/src/pages/HomePage.tsx` (created authenticated home page)
+  - `frontend/src/App.tsx` (configured router and QueryClientProvider)
+  - `docs/ARCHITECTURE.md` (updated with Section 6 Frontend Architecture)
+  - `docs/AI_DEVELOPMENT_LOG.md` (logged Milestone 6 activity)
+- **Verification Performed & Results**:
+  - Frontend TypeScript & production bundle build (`npm run build` in `frontend`): **PASSED** with 0 errors (`tsc && vite build`).
+  - Backend server running and healthy on `http://localhost:8080/api/health` (`200 OK`).
+  - Frontend server running and healthy on `http://localhost:5173` (`200 OK`).
+  - Browser subagent attempted E2E run; noted IDE environment Playwright driver download link (azureedge) returned 404.
+  - Clean boundary maintained: zero task CRUD, timer, or summary UI components created.
+
+
 

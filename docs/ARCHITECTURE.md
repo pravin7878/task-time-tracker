@@ -203,3 +203,41 @@ The system enforces the single-active-timer constraint via a **dual-layer defens
 - **Helmet**: Injects secure HTTP headers (HSTS, CSP, X-Frame-Options).
 - **Password Security**: Passwords hashed using bcrypt with salt rounds >= 10.
 - **Data Protection**: Sensitive properties (`passwordHash`) explicitly omitted using Mongoose `select: false` or controller mapping.
+
+---
+
+## 6. Frontend Architecture & Authentication Flow
+
+### 6.1 Authentication Architecture
+The frontend authentication system relies strictly on HTTP-only cookie session management:
+
+```
+Login / Register Form (React Hook Form)
+      ↓
+Backend Auth API (POST /api/auth/login or /register)
+      ↓
+Browser receives HTTP-only JWT cookie (withCredentials: true)
+      ↓
+GET /api/auth/me (Verification & User Profile)
+      ↓
+TanStack Query cache (queryKey: ['auth', 'me'])
+      ↓
+ProtectedRoute & PublicRoute Guards
+      ↓
+Authenticated Application (/app)
+```
+
+### 6.2 Key Architectural Principles
+1. **Zero Client Token Storage**:
+   - The frontend never reads, decodes, or stores the JWT in `localStorage`, `sessionStorage`, cookies, React state, or URL parameters.
+   - Completely eliminates vulnerabilities related to XSS token theft.
+2. **Server as Single Source of Truth**:
+   - The authoritative session state is determined exclusively by `GET /api/auth/me`.
+   - On page refresh or browser reopening, TanStack Query queries `/api/auth/me`. If the HTTP-only cookie is present and valid, the user seamlessly remains authenticated without state drift.
+3. **Route Protection Semantics**:
+   - `ProtectedRoute`: While session verification is loading, renders `LoadingSpinner`. If unauthenticated, redirects to `/login` preserving intended destination. If authenticated, renders protected content.
+   - `PublicRoute`: If authenticated, redirects to `/app`. Prevents logged-in users from unnecessarily seeing `/login` or `/register`.
+4. **Form Management & Error Handling**:
+   - Implemented with React Hook Form, typed data models, accessible labels, and field-level validation.
+   - Extracts server-side validation error messages and field mappings cleanly without exposing raw Axios error objects.
+
