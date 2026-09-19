@@ -60,6 +60,7 @@ export const useCreateTask = () => {
     mutationFn: (data: CreateTaskInput) => createTask(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: TASKS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ['summary'] });
     },
   });
 };
@@ -76,6 +77,7 @@ export const useUpdateTask = () => {
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: TASKS_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: [...TASKS_QUERY_KEY, id] });
+      queryClient.invalidateQueries({ queryKey: ['summary'] });
     },
   });
 };
@@ -90,6 +92,7 @@ export const useDeleteTask = () => {
     mutationFn: (id: string) => deleteTask(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: TASKS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ['summary'] });
     },
   });
 };

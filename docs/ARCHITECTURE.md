@@ -409,6 +409,53 @@ The frontend time tracking architecture bridges the authoritative backend Time T
 - Resolves task titles by cross-referencing `taskId` against the cached `useTasks('all')` query map, eliminating N+1 network requests.
 - Renders responsive desktop table and mobile card list views.
 
+---
+
+### 6.6 Daily Summary Dashboard Architecture (Milestone 9)
+
+The Daily Summary Dashboard (`/app`) aggregates the user's daily productivity metrics using the backend REST API (`GET /api/summary/today?timezone=...`):
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                             DashboardPage                              │
+│  [Banner + Timezone]  [Active Timer Callout]  [4 Productivity Cards]   │
+│  [Tasks Worked On Breakdown with Share Bars]  [Task Pipeline Status]   │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │
+                                    ▼
+                         useDailySummary(timezone)
+                                    │
+                        TanStack Query Cache (['summary', 'today', timezone])
+                                    │
+                                    ▼
+                          summary.service.ts
+                                    │
+                                    ▼
+                  GET /api/summary/today?timezone=...
+```
+
+#### 1. Automatic Timezone Resolution
+- Automatically detects the user's local IANA timezone using standard Web APIs:
+  `Intl.DateTimeFormat().resolvedOptions().timeZone` (e.g. `Asia/Kolkata`, `America/New_York`).
+- Passes timezone as a query parameter (`?timezone=...`), ensuring daily summary calendar day boundaries align precisely with the user's physical midnight-to-midnight day.
+
+#### 2. Response Shape & Data Modeling (`summary.types.ts`)
+- Matches the backend response schema strictly:
+  - `date`: User's local calendar date string (`YYYY-MM-DD`).
+  - `timezone`: Validated IANA timezone string.
+  - `totalTrackedTime`: Total tracked seconds for today (including live elapsed seconds of running active timer).
+  - `tasksWorkedOn`: Array of `{ taskId, title, timeSpentSeconds }` sorted descending by time spent.
+  - `completedTasks`: Array of completed tasks for the user.
+  - `inProgressTasks`: Array of in-progress tasks for the user.
+  - `pendingTasks`: Array of pending tasks for the user.
+
+#### 3. Reactive Cross-Feature Query Coordination
+- The dashboard automatically updates whenever time is tracked or tasks are modified across the app:
+  - Starting or stopping a timer (`useStartTimer`, `useStopTimer`) invalidates `['summary']`.
+  - Creating, updating, or deleting a task (`useCreateTask`, `useUpdateTask`, `useDeleteTask`) invalidates `['summary']`.
+- Users navigating back to the dashboard immediately see updated time totals, active timer callouts, and task counts without manual refreshing.
+
+
 
 
 

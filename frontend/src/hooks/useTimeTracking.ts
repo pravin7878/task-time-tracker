@@ -112,10 +112,11 @@ export const useStartTimer = () => {
       };
     },
     onSuccess: () => {
-      // Invalidate active timer, tasks list, and time logs
+      // Invalidate active timer, tasks list, time logs, and summary
       queryClient.invalidateQueries({ queryKey: ACTIVE_TIMER_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: TASKS_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: TIME_LOGS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ['summary'] });
     },
   });
 };
@@ -135,6 +136,7 @@ export const useStopTimer = () => {
       queryClient.invalidateQueries({ queryKey: ACTIVE_TIMER_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: TIME_LOGS_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: TASKS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ['summary'] });
     },
   });
 };

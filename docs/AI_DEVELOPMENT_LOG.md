@@ -566,6 +566,54 @@ This log records prompts, architectural decisions, implementations, and verifica
     [9] Time logs retrieval & newest-first descending sorting: PASSED
   - Verified zero Task.totalTime added and zero Daily Summary functionality added.
 
+---
+
+## Milestone 9: Daily Summary Dashboard UI + API Integration
+
+- **Date**: 2026-09-19
+- **Objective**: Implement the Daily Summary UI on the existing `/app` Dashboard using the backend Daily Summary REST API (`GET /api/summary/today?timezone=...`). Bind the UI to the actual backend response shape, detect the user's browser IANA timezone automatically, support cross-feature cache invalidation, and present high-value productivity metrics (tracked time today, completed/in-progress/pending task counts, tasks worked on breakdown with progress share bars, and live active session callout).
+- **Prompt Used**:
+  > "MILESTONE 9 — DAILY SUMMARY DASHBOARD
+  > Implement the Daily Summary UI on the existing /app Dashboard using the already completed backend summary API.
+  > Do NOT redesign the whole application and do NOT modify the backend summary logic unless a genuine integration issue is found.
+  > 1. Inspect First: existing DashboardPage, AppLayout/Header/Sidebar, Axios setup, TanStack Query setup, task/time-log types and hooks, backend summary endpoint and exact response shape.
+  > 2. Create Summary Types + Service: frontend/src/types/summary.types.ts, frontend/src/services/summary.service.ts, frontend/src/hooks/useDailySummary.ts (query key: ['summary', 'today', timezone]).
+  > 3. Detect User Timezone: Intl.DateTimeFormat().resolvedOptions().timeZone."
+- **Key Architectural Decisions**:
+  - **Strict Response Binding**: Defined `DailySummaryData` in `summary.types.ts` strictly matching the backend schema (`date`, `timezone`, `totalTrackedTime`, `tasksWorkedOn`, `completedTasks`, `pendingTasks`, `inProgressTasks`).
+  - **Automatic Timezone Detection**: Hook defaults to `Intl.DateTimeFormat().resolvedOptions().timeZone` and passes it as a query parameter (`?timezone=...`) to ensure calendar day boundaries align with the user's local timezone.
+  - **Cross-Feature Cache Coordination**: Added `['summary']` query invalidation to `useStartTimer`, `useStopTimer`, `useCreateTask`, `useUpdateTask`, and `useDeleteTask` so dashboard KPI counts and tracked time update reactively without requiring manual reloads.
+  - **Live Active Session Callout**: When an active timer is running, a prominent banner appears on the dashboard with a live ticking timer and a direct button to view the running task.
+  - **Tasks Worked On Breakdown**: Renders each task worked on today with duration, percentage progress bar of total time, and direct navigation.
+- **Files Created**:
+  - `frontend/src/types/summary.types.ts`
+  - `frontend/src/services/summary.service.ts`
+  - `frontend/src/hooks/useDailySummary.ts`
+  - `brain/.../scratch/test_milestone9.cjs`
+- **Files Modified**:
+  - `frontend/src/pages/DashboardPage.tsx`
+  - `frontend/src/hooks/useTimeTracking.ts` (added summary invalidation)
+  - `frontend/src/hooks/useTasks.ts` (added summary invalidation)
+  - `docs/ARCHITECTURE.md` (documented Section 6.6 Daily Summary Dashboard Architecture)
+  - `docs/AI_DEVELOPMENT_LOG.md` (documented Milestone 9)
+  - `walkthrough.md` (updated walkthrough)
+- **Verification Performed & Results**:
+  - Frontend TypeScript & production bundle build (`npm run build` in `frontend`): **PASSED** with 0 errors (`tsc && vite build`, 165 modules transformed in 6.13s).
+  - All 4 backend test suites executed against live MongoDB Atlas:
+    - `npm run test:auth`: **45 PASSED, 0 FAILED**
+    - `npm run test:tasks`: **38 PASSED, 0 FAILED**
+    - `npm run test:timer`: **47 PASSED, 0 FAILED**
+    - `npm run test:summary`: **56 PASSED, 0 FAILED**
+  - Full automated integration verification script (`test_milestone9.cjs`):
+    - [1] User registration & authentication: PASSED
+    - [2] `GET /api/summary/today?timezone=Asia/Kolkata`: PASSED
+    - [3] Task creation (Pending, In Progress, Completed): PASSED
+    - [4] Task status categorization in summary (1 pending, 1 in_progress, 1 completed): PASSED
+    - [5] Work session tracked and reflected in summary: PASSED
+    - [6] Active timer elapsed time included in summary `totalTrackedTime`: PASSED
+    - [7] Invalid timezone rejected with 400 Bad Request: PASSED
+
+
 
 
 
