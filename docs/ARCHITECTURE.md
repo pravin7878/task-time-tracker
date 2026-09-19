@@ -241,3 +241,54 @@ Authenticated Application (/app)
    - Implemented with React Hook Form, typed data models, accessible labels, and field-level validation.
    - Extracts server-side validation error messages and field mappings cleanly without exposing raw Axios error objects.
 
+### 6.3 Application Shell & Navigation Architecture (Milestone 6B)
+
+The authenticated application shell provides the foundational chrome for all post-login screens (Dashboard, Tasks, Time Logs). It separates navigation, identity representation, and page chrome from domain views.
+
+```
+<ProtectedRoute>
+  └── <AppLayout>
+        ├── <Sidebar />          (Desktop fixed navigation: 256px)
+        ├── <MobileNav />        (Accessible slide-out drawer + backdrop)
+        └── <MainArea>
+              ├── <Header />     (Sticky top bar with page title, hamburger & user greeting)
+              └── <MainContent>
+                    └── <Outlet /> (DashboardPage | TasksPage | TimeLogsPage)
+```
+
+#### 1. Nested Route Hierarchy & ProtectedRoute Relationship
+- `ProtectedRoute` acts as the root authentication guard:
+  - If unauthenticated, redirects to `/login` with location state preserved.
+  - If authenticated, renders the child `<Outlet />`.
+- Nested inside `ProtectedRoute` is `<Route element={<AppLayout />}>`:
+  - Enforces that all child routes (`/app`, `/app/tasks`, `/app/time-logs`) are guarded by authentication before `AppLayout` renders.
+  - Pages do not need to duplicate authentication checks, user fetching, or navigation shells.
+  - Page transitions occur inside `<Outlet />` without re-mounting the `Sidebar` or `Header`.
+
+#### 2. Desktop Sidebar (`Sidebar.tsx`)
+- **Branding**: Clean productivity-focused branding ("Task & Time Tracker") with an icon badge.
+- **Semantic Navigation**: Built using `<nav aria-label="Main Navigation">` and React Router `NavLink`.
+- **Active Navigation State**: Employs `NavLink` active classes with `end: true` for root `/app`, ensuring exact matching so `/app` does not remain highlighted when navigating to child paths like `/app/tasks`.
+- **User Identity Section**: Directly displays the authenticated user's name and email derived exclusively from `useAuth().user` (populated by `GET /api/auth/me`). No duplicate data stores or localStorage variables.
+- **Sign Out**: Clean logout action invoking `logoutMutation.mutate()` from `useAuth()`, clearing server cookies via `POST /api/auth/logout`, resetting TanStack Query cache, and smoothly redirecting to `/login`.
+
+#### 3. Top Header (`Header.tsx`)
+- Sticky top header (`sticky top-0 z-30`) with subtle backdrop blur.
+- Dynamic page context title computed from the current pathname (`Dashboard`, `Tasks`, `Time Logs`).
+- Accessible hamburger menu toggle (`aria-label="Open mobile navigation"`, `aria-expanded={isMobileMenuOpen}`) displayed on mobile viewports (`md:hidden`).
+- User profile greeting and status indicator.
+
+#### 4. Responsive Mobile Navigation (`MobileNav.tsx`)
+- Pure React local state (`isMobileMenuOpen`) managed in `AppLayout` — no Redux or global state store needed.
+- Fixed overlay backdrop (`fixed inset-0 bg-slate-900/40 z-40`) closing on backdrop click or Escape key.
+- Accessible slide-out drawer (`fixed inset-y-0 left-0 w-72 bg-white z-50 shadow-xl`) with explicit close button (`aria-label="Close navigation drawer"`).
+- Automatically closes drawer whenever a navigation link is clicked.
+- Complete keyboard accessibility with visible focus rings.
+
+#### 5. Clean Route-Level Views
+- `/app` -> `DashboardPage`: Welcome banner, authenticated user name, quick navigation cards to Tasks and Time Logs, and activity placeholder.
+- `/app/tasks` -> `TasksPage`: Route-level shell for Milestone 7 Task Management integration.
+- `/app/time-logs` -> `TimeLogsPage`: Route-level shell for Milestone 8 Time Tracking history integration.
+- Zero fake or mocked task/timer/summary data; strict preservation of backend API integrity.
+
+

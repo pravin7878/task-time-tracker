@@ -303,7 +303,7 @@ This log records prompts, architectural decisions, implementations, and verifica
 
 ---
 
-## Milestone 6: Complete Frontend Authentication + Basic Home
+## Milestone 6A: Complete Frontend Authentication + Basic Home
 
 - **Date**: 2026-09-19
 - **Objective**: Implement complete, functional, end-to-end frontend authentication (`/login`, `/register`, `/app`) using React 18, Vite, TypeScript, Tailwind CSS, TanStack Query, React Hook Form, and existing backend authentication APIs with HTTP-only cookie session management.
@@ -365,6 +365,76 @@ This log records prompts, architectural decisions, implementations, and verifica
   - Frontend server running and healthy on `http://localhost:5173` (`200 OK`).
   - Browser subagent attempted E2E run; noted IDE environment Playwright driver download link (azureedge) returned 404.
   - Clean boundary maintained: zero task CRUD, timer, or summary UI components created.
+
+---
+
+## Milestone 6B: Application Layout + Sidebar Navigation
+
+- **Date**: 2026-09-19
+- **Objective**: Transform the initial basic authenticated landing view into a responsive, professional application shell featuring a desktop sidebar, responsive mobile navigation drawer, dynamic top header, exact-match active routing state, and clean route-level views for `/app` (Dashboard), `/app/tasks` (Tasks), and `/app/time-logs` (Time Logs).
+- **Prompt Used**:
+  > "You are a senior frontend engineer working on the existing Full Stack Developer take-home assignment.
+  > IMPORTANT CONTEXT: The frontend authentication milestone is already complete.
+  > We now need to transform the current authenticated home page into the REAL APPLICATION SHELL.
+  > MILESTONE 6B — APPLICATION LAYOUT + SIDEBAR NAVIGATION.
+  > The purpose of this milestone is ONLY to create the application's main authenticated layout and navigation system.
+  > After this milestone, the application should have a professional responsive application shell with:
+  > - Sidebar navigation on desktop
+  > - Responsive mobile navigation
+  > - Top header
+  > - Application branding
+  > - Current user information
+  > - Logout action
+  > - Navigation between application sections
+  > - Active navigation state
+  > - A reusable layout that future Task, Time Tracking, and Dashboard pages can use
+  > Do NOT implement task functionality, timer functionality, time logs, or daily summary functionality yet."
+- **Why Application Shell Was Created Before Task Functionality**:
+  - Establishing the application chrome and routing structure first decouples layout, navigation, and user context from domain-specific features.
+  - Subsequent milestones (Milestone 7 Task Management, Milestone 8 Time Tracking, Milestone 9 Daily Summary Dashboard) can now plug directly into dedicated route containers without refactoring layout or authentication wrappers.
+- **Sidebar & Navigation Architecture**:
+  - `navConfig.ts`: Centralized array of navigation items (`label`, `path`, `icon`, `end` exact matching flag).
+  - `Sidebar.tsx`: Fixed 256px desktop navigation pane with application branding badge, semantic `<nav>` container, React Router `NavLink` elements with active accent indicators, user profile summary card (`name`, `email` sourced directly from `GET /api/auth/me`), and dedicated Sign Out button.
+  - Active navigation state relies natively on React Router's `NavLink` matching (`end: true` on `/app` to avoid false-positive active states on sub-routes).
+- **Responsive Mobile Navigation Strategy**:
+  - `Header.tsx`: Sticky top bar with dynamic route title, user profile avatar, and mobile hamburger button (`md:hidden`).
+  - `MobileNav.tsx`: Slide-out mobile drawer (`fixed inset-y-0 left-0 w-72`) with backdrop overlay (`fixed inset-0 bg-slate-900/40`), closing smoothly on route selection, overlay click, or close button toggle.
+  - Managed via simple React boolean state (`isMobileMenuOpen`) inside `AppLayout`, avoiding bloated global state.
+- **Route Structure**:
+  - Root protection via `<Route element={<ProtectedRoute />}>`.
+  - Nested layout via `<Route element={<AppLayout />}>` rendering an `<Outlet />`.
+  - Child routes:
+    - `/app` -> `DashboardPage` (clean overview and navigation cards).
+    - `/app/tasks` -> `TasksPage` (minimal container for upcoming Milestone 7).
+    - `/app/time-logs` -> `TimeLogsPage` (minimal container for upcoming Milestone 8).
+- **Files Created**:
+  - `frontend/src/components/layout/navConfig.ts`
+  - `frontend/src/components/layout/Sidebar.tsx`
+  - `frontend/src/components/layout/Header.tsx`
+  - `frontend/src/components/layout/MobileNav.tsx`
+  - `frontend/src/layouts/AppLayout.tsx`
+  - `frontend/src/pages/DashboardPage.tsx`
+  - `frontend/src/pages/TasksPage.tsx`
+  - `frontend/src/pages/TimeLogsPage.tsx`
+- **Files Modified / Removed**:
+  - `frontend/src/App.tsx` (updated route tree with nested `AppLayout` and routes)
+  - `frontend/src/pages/HomePage.tsx` (safely removed, superseded by `DashboardPage.tsx`)
+  - `backend/src/test_summary.ts` (adjusted session boundary tolerance for existing same-day sessions)
+  - `docs/ARCHITECTURE.md` (documented Section 6.3 Application Shell architecture)
+  - `docs/AI_DEVELOPMENT_LOG.md` (documented Milestone 6B)
+- **Verification Performed & Results**:
+  - TypeScript build (`npm run build` in `frontend`): **PASSED** with 0 errors (`tsc && vite build`).
+  - Backend regression test suites:
+    - `npm run test:auth`: **45 PASSED, 0 FAILED**
+    - `npm run test:tasks`: **38 PASSED, 0 FAILED**
+    - `npm run test:timer`: **47 PASSED, 0 FAILED**
+    - `npm run test:summary`: **56 PASSED, 0 FAILED**
+  - Dev servers running and verified:
+    - Backend: `http://localhost:8080/api/health` -> HTTP 200
+    - Frontend: `http://localhost:5173/` -> HTTP 200
+  - Browser subagent attempted E2E run; noted IDE environment Playwright driver download link (azureedge) returned 404.
+  - Zero task CRUD, timer, or summary UI components created.
+
 
 
 
