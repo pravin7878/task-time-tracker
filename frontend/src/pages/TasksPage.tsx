@@ -15,10 +15,17 @@ import {
   useUpdateTask,
   useDeleteTask,
 } from '../hooks/useTasks';
+import {
+  useActiveTimer,
+  useStartTimer,
+  useStopTimer,
+  useTimeLogs,
+} from '../hooks/useTimeTracking';
 import { TaskCard } from '../components/tasks/TaskCard';
 import { TaskListItem } from '../components/tasks/TaskListItem';
 import { TaskFormModal } from '../components/tasks/TaskFormModal';
 import { DeleteTaskModal } from '../components/tasks/DeleteTaskModal';
+import { Toast, ToastMessage } from '../components/common/Toast';
 
 export const TasksPage: React.FC = () => {
   // Filter state
@@ -40,11 +47,42 @@ export const TasksPage: React.FC = () => {
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
   const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
 
+  // Auto-dismiss Toast state
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+
+  const showToast = (
+    type: 'info' | 'warning' | 'error' | 'success',
+    message: string
+  ) => {
+    setToast({
+      id: String(Date.now()),
+      type,
+      message,
+    });
+  };
+
   // Queries & Mutations
   const { data: tasks = [], isLoading, isError, error, refetch } = useTasks(filter);
   const createTaskMutation = useCreateTask();
   const updateTaskMutation = useUpdateTask();
   const deleteTaskMutation = useDeleteTask();
+
+  // Time tracking hooks
+  const { data: activeTimer } = useActiveTimer();
+  const { data: timeLogs = [] } = useTimeLogs();
+  const startTimerMutation = useStartTimer();
+  const stopTimerMutation = useStopTimer();
+
+  // Group completed session durations by taskId (avoids N+1 requests)
+  const taskTotalTimeMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const log of timeLogs) {
+      if (typeof log.duration === 'number' && log.duration > 0) {
+        map.set(log.taskId, (map.get(log.taskId) || 0) + log.duration);
+      }
+    }
+    return map;
+  }, [timeLogs]);
 
   // Filter counts across the user's tasks
   const { data: allTasks = [] } = useTasks('all');
@@ -97,14 +135,118 @@ export const TasksPage: React.FC = () => {
 
   // Quick status change from TaskCard / TaskListItem dropdown
   const handleQuickStatusChange = async (task: Task, nextStatus: TaskStatus) => {
+    if (nextStatus === task.status) return;
+
+    const isRunning = activeTimer?.taskId === task.id;
+
+    // Rule: When timer is running, user CANNOT change In Progress → Pending
+    if (isRunning && nextStatus === 'pending') {
+      showToast(
+        'warning',
+        'Cannot mark task as Pending while its timer is running. Stop the timer first.'
+      );
+      return;
+    }
+
+    // Rule: When timer is running, user CAN change In Progress → Completed
+    // If user selects Completed while timer is running:
+    // 1. Stop the timer first.
+    // 2. Then change status to Completed.
+    // Never leave the task as Completed + Running Timer.
+    // If timer stops successfully but status update fails, keep timer stopped and show a recoverable error.
+    if (isRunning && nextStatus === 'completed') {
+      try {
+        setStatusUpdatingId(task.id);
+
+        // Step 1: Stop timer first
+        try {
+          await stopTimerMutation.mutateAsync(task.id);
+        } catch (stopErr: unknown) {
+          const msg = stopErr instanceof Error ? stopErr.message : 'Failed to stop timer';
+          showToast('error', `Could not stop timer: ${msg}. Task was not marked as completed.`);
+          return;
+        }
+
+        // Step 2: Then update status to Completed
+        try {
+          await updateTaskMutation.mutateAsync({
+            id: task.id,
+            data: { status: 'completed' },
+          });
+          showToast('success', `Timer stopped and task marked as Completed.`);
+        } catch (statusErr: unknown) {
+          const msg = statusErr instanceof Error ? statusErr.message : 'Failed to update status';
+          showToast(
+            'error',
+            `Timer was stopped, but updating status to Completed failed (${msg}). Please set status to Completed manually.`
+          );
+        }
+      } finally {
+        setStatusUpdatingId(null);
+      }
+      return;
+    }
+
+    // Normal status change (when timer is not running on this task)
     try {
       setStatusUpdatingId(task.id);
       await updateTaskMutation.mutateAsync({
         id: task.id,
         data: { status: nextStatus },
       });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to update task status';
+      showToast('error', msg);
     } finally {
       setStatusUpdatingId(null);
+    }
+  };
+
+  // Start timer handler
+  const handleStartTimer = async (task: Task) => {
+    try {
+      const result = await startTimerMutation.mutateAsync({
+        taskId: task.id,
+        currentStatus: task.status,
+      });
+
+      if (result.statusUpdateFailed) {
+        showToast(
+          'warning',
+          `Timer started for "${task.title}", but automatic status update failed. Timer is running; please update status manually.`
+        );
+      }
+    } catch (err: unknown) {
+      // Friendly handling of 409 conflict
+      const errorObj = err as Record<string, unknown>;
+      const responseObj = errorObj?.response as Record<string, unknown> | undefined;
+      const isConflict =
+        responseObj?.status === 409 ||
+        errorObj?.statusCode === 409 ||
+        (typeof errorObj?.message === 'string' &&
+          (errorObj.message.includes('409') ||
+            errorObj.message.toLowerCase().includes('already running') ||
+            errorObj.message.toLowerCase().includes('conflict')));
+
+      if (isConflict) {
+        showToast(
+          'warning',
+          'Another timer is already running. Stop it before starting another task.'
+        );
+      } else {
+        const msg = err instanceof Error ? err.message : 'Failed to start timer';
+        showToast('error', msg);
+      }
+    }
+  };
+
+  // Stop timer handler
+  const handleStopTimer = async (task: Task) => {
+    try {
+      await stopTimerMutation.mutateAsync(task.id);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to stop timer';
+      showToast('error', msg);
     }
   };
 
@@ -327,10 +469,22 @@ export const TasksPage: React.FC = () => {
               <TaskListItem
                 key={task.id}
                 task={task}
+                activeTimer={activeTimer}
+                totalTrackedSeconds={taskTotalTimeMap.get(task.id) || 0}
                 onEdit={handleOpenEditModal}
                 onDelete={(t) => setTaskToDelete(t)}
                 onStatusChange={handleQuickStatusChange}
+                onStartTimer={handleStartTimer}
+                onStopTimer={handleStopTimer}
                 isUpdatingStatus={statusUpdatingId === task.id}
+                isStartingTimer={
+                  startTimerMutation.isPending &&
+                  startTimerMutation.variables?.taskId === task.id
+                }
+                isStoppingTimer={
+                  stopTimerMutation.isPending &&
+                  stopTimerMutation.variables === task.id
+                }
               />
             ))}
           </div>
@@ -340,10 +494,22 @@ export const TasksPage: React.FC = () => {
               <TaskCard
                 key={task.id}
                 task={task}
+                activeTimer={activeTimer}
+                totalTrackedSeconds={taskTotalTimeMap.get(task.id) || 0}
                 onEdit={handleOpenEditModal}
                 onDelete={(t) => setTaskToDelete(t)}
                 onStatusChange={handleQuickStatusChange}
+                onStartTimer={handleStartTimer}
+                onStopTimer={handleStopTimer}
                 isUpdatingStatus={statusUpdatingId === task.id}
+                isStartingTimer={
+                  startTimerMutation.isPending &&
+                  startTimerMutation.variables?.taskId === task.id
+                }
+                isStoppingTimer={
+                  stopTimerMutation.isPending &&
+                  stopTimerMutation.variables === task.id
+                }
               />
             ))}
           </div>
@@ -369,6 +535,9 @@ export const TasksPage: React.FC = () => {
         onConfirm={handleDeleteConfirm}
         isDeleting={deleteTaskMutation.isPending}
       />
+
+      {/* Small Auto-Dismiss Toast */}
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
     </div>
   );
 };

@@ -1,7 +1,9 @@
 import React from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { FiMenu, FiLogOut } from 'react-icons/fi';
 import { useAuth } from '../../hooks/useAuth';
+import { useActiveTimer } from '../../hooks/useTimeTracking';
+import { LiveTimer } from '../timer/LiveTimer';
 
 interface HeaderProps {
   onOpenMobileMenu: () => void;
@@ -11,6 +13,9 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
   const { user, logout, isLoggingOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Active timer retrieved directly from existing query
+  const { data: activeTimer } = useActiveTimer();
 
   const getPageTitle = (pathname: string): string => {
     if (pathname.startsWith('/app/tasks')) return 'Tasks';
@@ -31,7 +36,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
 
   return (
     <header className="h-16 bg-white border-b border-slate-200 sticky top-0 z-20 px-4 sm:px-6 lg:px-8 flex items-center justify-between shadow-xs">
-      {/* Left side: Hamburger on mobile + page title */}
+      {/* Left side: Hamburger on mobile + page title + active timer badge */}
       <div className="flex items-center gap-3 sm:gap-4">
         <button
           onClick={onOpenMobileMenu}
@@ -46,6 +51,17 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
             {currentTitle}
           </h1>
         </div>
+
+        {/* Active Timer Pill: Live timer only (● ◷ 00:05:27) */}
+        {activeTimer && (
+          <Link
+            to="/app/tasks"
+            className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200/80 text-blue-700 hover:bg-blue-100 hover:border-blue-300 transition-all text-xs font-medium shadow-xs ml-1"
+            title="Live timer active. Click to view tasks."
+          >
+            <LiveTimer startedAt={activeTimer.startedAt} showIcon={true} />
+          </Link>
+        )}
       </div>
 
       {/* Right side: User information + sign out */}

@@ -348,6 +348,68 @@ TasksPage (Component UI)
 - **Persistent View Preference**:
   - User preference toggled via header buttons and persisted locally in `localStorage` (`task_view_mode: 'list' | 'grid'`).
 
+---
+
+### 6.5 Time Tracking Architecture (Milestone 8)
+
+The frontend time tracking architecture bridges the authoritative backend Time Tracking REST API (`POST /api/tasks/:id/timer/start`, `POST /api/tasks/:id/timer/stop`, `GET /api/timer/active`, `GET /api/time-logs`, `GET /api/tasks/:id/time-logs`) with modern reactive UI components:
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                          Tasks Page / Header                           │
+│  [Header Active Timer]          [TaskCard / TaskListItem Controls]    │
+│            │                                  │                        │
+│            ▼                                  ▼                        │
+│   useActiveTimer()                    useStartTimer() / useStopTimer() │
+└────────────┬──────────────────────────────────┬────────────────────────┘
+             │                                  │
+             │ TanStack Query Cache             ▼
+             │ (['timer', 'active'])    timeTracking.service.ts
+             │                                  │
+             ▼                                  ▼
+      GET /api/timer/active             POST /tasks/:id/timer/start
+                                        POST /tasks/:id/timer/stop
+                                        PATCH /tasks/:id (auto-progress)
+```
+
+#### 1. Invariants & Product Separation
+- **Task Status vs Timer State**:
+  - Task status (`pending`, `in_progress`, `completed`) and timer running state (`active`, `stopped`) are independent concepts.
+  - The manual task status `<select>` dropdown remains on all cards and list rows, allowing users to transition between states at any time without triggering or requiring a timer.
+- **Single Automatic Transition**:
+  - Only one automatic transition exists: when starting a timer on a `pending` task, the task is automatically transitioned to `in_progress` via `PATCH /api/tasks/:taskId`.
+  - If a task is already `in_progress`, starting the timer starts the session while keeping the status as `in_progress`.
+- **Stop Timer Invariant**:
+  - Stopping an active timer **never** transitions a task to `completed`. The status remains as-is (`in_progress`).
+- **Completed Task Protection**:
+  - Tasks in `completed` status cannot start a timer. The timer start button is replaced by a badge reading `"Reopen to track time"`. Users must explicitly reopen the task before recording time.
+
+#### 2. Server as Single Source of Truth
+- **Zero Local Storage State**: No timer running state, timestamps, or counters are persisted in `localStorage` or `sessionStorage`.
+- **Active Timer Recovery**:
+  - `useActiveTimer()` queries `GET /api/timer/active` on page load, mount, or window focus.
+  - If a user refreshes or changes devices, the running session is immediately recovered.
+- **Live Counter Component (`LiveTimer.tsx`)**:
+  - Derives elapsed seconds purely from `Date.now() - new Date(startedAt).getTime()`.
+  - Driven by a 1-second `setInterval` with complete lifecycle cleanup to prevent memory leaks.
+
+#### 3. Single Active Timer & 409 Conflict Protection
+- The backend permits only 1 running timer per user enforced by a MongoDB partial unique index (`{ userId: 1 }, { unique: true, partialFilterExpression: { endedAt: null } }`).
+- Starting a second timer triggers `HTTP 409 Conflict`.
+- `TasksPage` intercepts 409 conflicts and surfaces an actionable, dismissible error banner without affecting the running session.
+
+#### 4. Status Update Failure Graceful Degradation
+- In `useStartTimer({ taskId, currentStatus })`:
+  1. `POST /api/tasks/:id/timer/start` executes first and must succeed.
+  2. If `currentStatus === 'pending'`, `PATCH /api/tasks/:id` with `{ status: 'in_progress' }` is executed.
+  3. If the PATCH fails (network drop or temporary glitch), the running timer is **NOT** stopped. It remains running, all queries are refreshed, and a recoverable warning notification is surfaced alerting the user that the timer started and the task status can be updated manually.
+
+#### 5. Chronological Time Logs & Zero N+1 Queries (`TimeLogsPage.tsx`)
+- Displays all recorded sessions sorted newest-first (`startedAt` descending).
+- Resolves task titles by cross-referencing `taskId` against the cached `useTasks('all')` query map, eliminating N+1 network requests.
+- Renders responsive desktop table and mobile card list views.
+
+
 
 
 

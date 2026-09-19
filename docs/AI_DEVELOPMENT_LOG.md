@@ -500,6 +500,73 @@ This log records prompts, architectural decisions, implementations, and verifica
     - Verify task list is empty
   - Confirmed zero timer, time tracking, or daily summary UI components were created.
 
+---
+
+## Milestone 8: Complete Time Tracking UI + API Integration
+
+- **Date**: 2026-09-19
+- **Objective**: Implement the complete frontend time-tracking experience on top of the existing backend Time Tracking REST API (`POST /api/tasks/:id/timer/start`, `POST /api/tasks/:id/timer/stop`, `GET /api/timer/active`, `GET /api/time-logs`, `GET /api/tasks/:id/time-logs`). Ensure strict adherence to core product rules separating task status from timer running state, preventing completed task timer starts, single running timer enforcement, active session recovery on page reload, newest-first chronological logs, and zero N+1 queries.
+- **Prompt Used**:
+  > "You are working on the task-time-tracker project.
+  > We are now implementing: MILESTONE 8 — COMPLETE TIME TRACKING UI + API INTEGRATION.
+  > Apply these final clarifications:
+  > 1. KEEP the existing manual task status selector (Pending -> In Progress -> Completed without starting a timer).
+  > 2. Timer and task status remain separate concepts.
+  > 3. Only this automatic transition exists: Pending + successful Start Timer -> update task to In Progress.
+  > 4. If task is already In Progress: Start Timer -> timer runs, status remains In Progress.
+  > 5. Stop Timer NEVER changes task status.
+  > 6. Completed tasks cannot start a timer. Do not automatically change Completed -> In Progress. User must manually reopen the task first.
+  > 7. For useStartTimer(), do not perform an unnecessary GET just to determine task status. Pass the current task status into the mutation.
+  > 8. Start Timer must succeed before the automatic status update is attempted.
+  > 9. If timer start succeeds but subsequent PATCH fails: DO NOT stop timer, keep running, refetch, show clear recoverable error.
+  > 10. Time Logs displayed newest-first (sort by startedAt descending).
+  > 11. Header active timer indicator allowed, using existing active-timer query.
+  > 12. Do not use localStorage/sessionStorage for timer state.
+  > 13. Do not add Task.totalTime.
+  > 14. Do not add any Daily Summary functionality yet."
+- **Key Architectural Decisions**:
+  - **Task Status vs Timer State Separation**: Kept the manual `<select>` status dropdown on both `TaskCard` and `TaskListItem`. Users can transition tasks through any lifecycle phase manually without starting a timer.
+  - **Start Timer Auto-Transition & Graceful Degradation**: In `useStartTimer({ taskId, currentStatus })`, `startTimer(taskId)` runs first. Only if `currentStatus === 'pending'` does it execute `updateTask(taskId, { status: 'in_progress' })`. If the status PATCH fails, the running timer is NOT stopped; it remains running and a recoverable warning banner is displayed.
+  - **Stop Timer Invariant**: Stopping a timer strictly records elapsed time and clears active session; it never changes the task status to `completed`.
+  - **Completed Task Protection**: Completed tasks show a disabled badge stating `"Reopen to track time"`.
+  - **Server Single Source of Truth**: Active timer is queried from `GET /api/timer/active` via `useActiveTimer()`. Zero timer timestamps or states are stored in browser storage.
+  - **Header Active Timer Pill**: Added in `Header.tsx` consuming the existing `useActiveTimer()` query directly with zero secondary state.
+  - **Zero N+1 Time Logs Page**: In `TimeLogsPage.tsx`, sessions are displayed newest-first. Task titles are resolved synchronously from the cached `useTasks('all')` query map.
+- **Files Created**:
+  - `frontend/src/types/timeLog.types.ts`
+  - `frontend/src/services/timeTracking.service.ts`
+  - `frontend/src/hooks/useTimeTracking.ts`
+  - `frontend/src/components/timer/LiveTimer.tsx`
+  - `brain/.../scratch/test_milestone8.cjs`
+- **Files Modified**:
+  - `frontend/src/components/tasks/TaskCard.tsx` (timer start/stop controls, active highlight, completed task protection)
+  - `frontend/src/components/tasks/TaskListItem.tsx` (timer start/stop controls matching TaskCard)
+  - `frontend/src/components/tasks/StatusBadge.tsx` (cleaned pulse indicator)
+  - `frontend/src/pages/TasksPage.tsx` (integrated timer hooks, 409 conflict alert, warning banner)
+  - `frontend/src/components/layout/Header.tsx` (active timer pill using useActiveTimer)
+  - `frontend/src/pages/TimeLogsPage.tsx` (chronological session history table/cards, newest-first)
+  - `docs/ARCHITECTURE.md` (documented Section 6.5 Time Tracking Architecture)
+  - `docs/AI_DEVELOPMENT_LOG.md` (documented Milestone 8)
+- **Verification Performed & Results**:
+  - Frontend TypeScript & production bundle build (`npm run build` in `frontend`): **PASSED** with 0 errors (`tsc && vite build`, 162 modules transformed).
+  - All 4 backend test suites executed against live MongoDB Atlas:
+    - `npm run test:auth`: **45 PASSED, 0 FAILED**
+    - `npm run test:tasks`: **38 PASSED, 0 FAILED**
+    - `npm run test:timer`: **47 PASSED, 0 FAILED**
+    - `npm run test:summary`: **56 PASSED, 0 FAILED**
+  - Full automated integration verification script (`test_milestone8.cjs`):
+    - [1] User registration & authentication: PASSED
+    [2] Task creation with status pending: PASSED
+    [3] Manual status transitions without timer: PASSED
+    [4] Start timer on pending task + auto-transition to in_progress: PASSED
+    [5] Active timer recovery (`GET /api/timer/active`): PASSED
+    [6] 409 Conflict when starting second timer: PASSED
+    [7] Stop timer invariant: status remains in_progress (NOT completed): PASSED
+    [8] Completed task protection ("Reopen to track time"): PASSED
+    [9] Time logs retrieval & newest-first descending sorting: PASSED
+  - Verified zero Task.totalTime added and zero Daily Summary functionality added.
+
+
 
 
 
