@@ -383,6 +383,14 @@ const runSummaryTests = async () => {
 
     // 11. Cross-Midnight Completed Session Logic
     console.log('\n[11/14] Testing Cross-Midnight Completed Session Split...');
+    // Create dedicated test task for cross-midnight testing so metrics are completely isolated
+    const crossMidnightTask = await Task.create({
+      userId: userIdA,
+      title: 'Dedicated Cross Midnight Task',
+      status: 'in_progress',
+    });
+    const crossTaskId = crossMidnightTask._id.toString();
+
     // Create a historical cross-midnight session in UTC:
     // Day 1: 2026-09-18, 23:30 UTC
     // Day 2: 2026-09-19, 00:30 UTC (total session = 3600 seconds = 1 hour)
@@ -391,7 +399,7 @@ const runSummaryTests = async () => {
 
     const crossLog = await TimeLog.create({
       userId: userIdA,
-      taskId: task1Id,
+      taskId: crossTaskId,
       startedAt: crossStart,
       endedAt: crossEnd,
       duration: 3600,
@@ -403,14 +411,13 @@ const runSummaryTests = async () => {
       'UTC',
       new Date('2026-09-18T23:50:00.000Z')
     );
-    // Overlap on Day 1 is 23:30 -> 24:00 (1800s) + any previous sessions if created today in UTC
-    const day1CrossTask = day1Summary.tasksWorkedOn.find((t) => t.taskId === task1Id);
+    const day1CrossTask = day1Summary.tasksWorkedOn.find((t) => t.taskId === crossTaskId);
     assert(
       day1Summary.date === '2026-09-18',
       'Day 1 date is 2026-09-18'
     );
     assert(
-      (day1CrossTask?.timeSpentSeconds || 0) >= 1800,
+      day1CrossTask?.timeSpentSeconds === 1800,
       'Day 1 includes exactly 1800 seconds (30m) from cross-midnight session'
     );
 
@@ -420,7 +427,7 @@ const runSummaryTests = async () => {
       'UTC',
       new Date('2026-09-19T10:00:00.000Z')
     );
-    const day2CrossTask = day2Summary.tasksWorkedOn.find((t) => t.taskId === task1Id);
+    const day2CrossTask = day2Summary.tasksWorkedOn.find((t) => t.taskId === crossTaskId);
     assert(
       day2Summary.date === '2026-09-19',
       'Day 2 date is 2026-09-19'
@@ -430,17 +437,26 @@ const runSummaryTests = async () => {
       'Day 2 includes exactly 1800 seconds (30m) from cross-midnight session'
     );
 
-    // Clean up the artificial cross-midnight log
+    // Clean up the artificial cross-midnight log and task
     await TimeLog.findByIdAndDelete(crossLog._id);
+    await Task.findByIdAndDelete(crossTaskId);
     assert(true, 'Cross-midnight session split cleanly: 1800s on Day 1, 1800s on Day 2');
 
     // 12. Cross-Midnight Active Session Logic
     console.log('\n[12/14] Testing Cross-Midnight Active Session Calculation...');
+    // Create dedicated test task for active cross-midnight testing
+    const activeCrossTask = await Task.create({
+      userId: userIdA,
+      title: 'Dedicated Active Cross Midnight Task',
+      status: 'in_progress',
+    });
+    const activeCrossTaskId = activeCrossTask._id.toString();
+
     // Active session started at 23:45 on Day 1, currently at 00:15 on Day 2
     const activeCrossStart = new Date('2026-09-18T23:45:00.000Z');
     const activeCrossLog = await TimeLog.create({
       userId: userIdA,
-      taskId: task2Id,
+      taskId: activeCrossTaskId,
       startedAt: activeCrossStart,
       endedAt: null,
       duration: null,
@@ -449,16 +465,16 @@ const runSummaryTests = async () => {
     // Reference instant on Day 1 at 23:55 (10 min after start)
     const refDay1 = new Date('2026-09-18T23:55:00.000Z');
     const summaryActiveDay1 = await getDailySummary(userIdA, 'UTC', refDay1);
-    const task2ActiveDay1 = summaryActiveDay1.tasksWorkedOn.find((t) => t.taskId === task2Id);
+    const task2ActiveDay1 = summaryActiveDay1.tasksWorkedOn.find((t) => t.taskId === activeCrossTaskId);
     assert(
-      (task2ActiveDay1?.timeSpentSeconds || 0) >= 600,
-      'Day 1 summary counts only the 10 min elapsed before midnight'
+      task2ActiveDay1?.timeSpentSeconds === 600,
+      'Day 1 summary counts exactly 10 min (600s) elapsed before midnight'
     );
 
     // Reference instant on Day 2 at 00:15 (15 min after midnight)
     const refDay2 = new Date('2026-09-19T00:15:00.000Z');
     const summaryActiveDay2 = await getDailySummary(userIdA, 'UTC', refDay2);
-    const task2ActiveDay2 = summaryActiveDay2.tasksWorkedOn.find((t) => t.taskId === task2Id);
+    const task2ActiveDay2 = summaryActiveDay2.tasksWorkedOn.find((t) => t.taskId === activeCrossTaskId);
     assert(
       task2ActiveDay2?.timeSpentSeconds === 900,
       'Day 2 summary counts exactly 15 min (900s) from midnight to 00:15'
@@ -469,8 +485,9 @@ const runSummaryTests = async () => {
     assert(reloadedActiveLog?.endedAt === null, 'Active log endedAt remains null in DB');
     assert(reloadedActiveLog?.duration === null, 'Active log duration remains null in DB');
 
-    // Clean up the artificial active log
+    // Clean up the artificial active log and task
     await TimeLog.findByIdAndDelete(activeCrossLog._id);
+    await Task.findByIdAndDelete(activeCrossTaskId);
 
     // 13. Timezone Boundary Differences
     console.log('\n[13/14] Testing Timezone Boundary Differentiation...');

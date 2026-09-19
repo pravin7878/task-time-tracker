@@ -287,8 +287,68 @@ The authenticated application shell provides the foundational chrome for all pos
 
 #### 5. Clean Route-Level Views
 - `/app` -> `DashboardPage`: Welcome banner, authenticated user name, quick navigation cards to Tasks and Time Logs, and activity placeholder.
-- `/app/tasks` -> `TasksPage`: Route-level shell for Milestone 7 Task Management integration.
+- `/app/tasks` -> `TasksPage`: Route-level container for Milestone 7 Task Management integration.
 - `/app/time-logs` -> `TimeLogsPage`: Route-level shell for Milestone 8 Time Tracking history integration.
 - Zero fake or mocked task/timer/summary data; strict preservation of backend API integrity.
+
+### 6.4 Frontend Task Management Architecture (Milestone 7)
+
+The Task Management UI at `/app/tasks` is built on a unidirectional data flow powered by TanStack Query, typed REST service modules, and accessible component dialogs.
+
+```
+TasksPage (Component UI)
+  │
+  ├── Reads State: useTasks(filter) ──► TanStack Query Cache (['tasks', ...])
+  │                                           │
+  │                                     queryFn: getTasks(status)
+  │                                           │
+  │                                           ▼
+  ├── Mutations: useCreateTask() ────► task.service.ts
+  │              useUpdateTask()              │
+  │              useDeleteTask()              ▼
+  │                                    apiClient (Axios)
+  │                                           │
+  │                                           ▼
+  └── React Hook Form Modals          Backend Task REST API
+      (TaskFormModal, DeleteModal)   (/api/tasks, /api/tasks/:id)
+```
+
+#### 1. Server State & Cache Invalidation Strategy
+- **Query Keys**:
+  - `['tasks']`: Root query key matching all tasks.
+  - `['tasks', { status }]`: Scoped query for active filter tabs (`pending`, `in_progress`, `completed`).
+  - `['tasks', taskId]`: Single task query key for task details.
+- **Cache Invalidation**:
+  - `createTask`: Automatically invalidates `['tasks']`, causing the active filter view to refresh immediately with the newly inserted task.
+  - `updateTask`: Invalidates `['tasks']` and `['tasks', id]`, updating status badges and card content without a full page reload.
+  - `deleteTask`: Invalidates `['tasks']`, instantly removing the deleted task from the list.
+- **Single Source of Truth**:
+  - The frontend maintains zero separate manual arrays or Redux task slices. TanStack Query acts as the authoritative reactive state container.
+
+#### 2. Strict Backend Ownership & Data Isolation
+- **No Client User ID**: All task requests omit client-supplied `userId`.
+- The backend derives identity exclusively from the verified JWT in the HTTP-only cookie (`req.user.id`).
+- When switching accounts or logging out, `queryClient.clear()` ensures that cached tasks are purged and never cross-pollute user sessions.
+
+#### 3. Error Handling & 409 Conflict Protection
+- **Active Timer Delete Safeguard**:
+  - When `DELETE /api/tasks/:id` returns `409 Conflict`, `DeleteTaskModal` extracts the backend error message (`"Cannot delete a task while its timer is running."`) via `extractApiError()` and displays it in a dedicated warning alert within the modal dialog.
+  - The UI does not attempt to bypass this constraint or kill the timer silently.
+- **Validation Errors**:
+  - Form validation is enforced client-side via React Hook Form (1–200 characters for title, max 2000 for description).
+  - Server-side runtime validation errors (e.g. invalid status or invalid ID) are caught and displayed in user-facing error banners.
+
+#### 4. Dual Presentation Modes (List & Grid Views)
+- **Default List View (`TaskListItem.tsx`)**:
+  - Full-width horizontal row presentation optimized for dense task scanning and status tracking.
+  - Left-aligned title, description, and creation metadata; right-aligned status badge, status selector, and edit/delete actions.
+  - Fully responsive, collapsing into clean stacked items on mobile screens.
+- **Grid View (`TaskCard.tsx`)**:
+  - 3-column card grid presentation for card-based visual overview.
+- **Persistent View Preference**:
+  - User preference toggled via header buttons and persisted locally in `localStorage` (`task_view_mode: 'list' | 'grid'`).
+
+
+
 
 
