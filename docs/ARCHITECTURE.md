@@ -457,15 +457,24 @@ The Daily Summary Dashboard (`/app`) aggregates the user's daily productivity me
 
 ---
 
-### 6.7 Gemini 3.6 Flash AI Subsystem Architecture (Milestone 10 Part A)
+### 6.7 Gemini 3.6 Flash AI Subsystem Architecture (Milestone 10 Parts A & B)
 
-The AI Subsystem provides natural-language task improvement via Google Gemini 3.6 Flash without introducing auto-creation side effects or client exposure.
+The AI Subsystem provides optional, natural-language task improvement via Google Gemini 3.6 Flash without introducing auto-creation side effects or client exposure.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                        Authenticated Client                            │
-│           POST /api/ai/task-suggestion { "input": "..." }              │
+│                        User in TaskFormModal                           │
+│  Inputs title/description → clicks "Improve with Gemini"               │
 └───────────────────────────────────┬────────────────────────────────────┘
+                                    │
+                                    ▼
+                        [useTaskSuggestion Mutation]
+                                    │
+                                    ▼
+                         [ai.service.ts Frontend]
+                                    │
+                                    ▼
+           POST /api/ai/task-suggestion { "input": "..." }
                                     │
                                     ▼
                          [requireAuth Middleware]
@@ -478,7 +487,7 @@ The AI Subsystem provides natural-language task improvement via Google Gemini 3.
                          (string, trimmed, 1-1000 chars)
                                     │
                                     ▼
-                       [ai.service.ts: generateTaskSuggestion]
+                       [ai.service.ts Backend: generateTaskSuggestion]
                          (lazy client, dynamic process.env.GEMINI_MODEL)
                                     │
                                     ▼
@@ -491,6 +500,10 @@ The AI Subsystem provides natural-language task improvement via Google Gemini 3.
                                     │
                                     ▼
                  200 OK: { success: true, data: { title, description } }
+                                    │
+                                    ▼
+                      [TaskFormModal Suggestion Card]
+                 User chooses: [Accept Suggestion] or [Ignore]
 ```
 
 #### 1. Backend-Only Security & Isolation
@@ -498,11 +511,11 @@ The AI Subsystem provides natural-language task improvement via Google Gemini 3.
 - **Dynamic Model Resolution**: The model identifier is read at runtime from `process.env.GEMINI_MODEL` (default: `gemini-3.6-flash`). It is not hardcoded inside controllers or services.
 - **Authentication**: All AI suggestion requests require a valid JWT token (`requireAuth`).
 
-#### 2. Functional Architecture
-- Fully follows the established functional paradigm:
-  `Route (ai.routes.ts) → Middleware (requireAuth) → Controller (ai.controller.ts) → Service (ai.service.ts) → @google/genai SDK`.
-- No application-layer classes or heavy ORM wrappers.
-- Lazy client initialization ensures importing modules does not crash or require an API key during unit tests.
+#### 2. Functional Architecture & Client Integration
+- Follows the decoupled layered paradigm:
+  - **Frontend**: `TaskFormModal` → `useTaskSuggestion` (TanStack Query mutation) → `ai.service.ts` (Axios `apiClient`).
+  - **Backend**: Route (`ai.routes.ts`) → Middleware (`requireAuth`) → Controller (`ai.controller.ts`) → Service (`ai.service.ts`) → `@google/genai` SDK.
+- TanStack Query mutation maintains reactive `isPending` and error states without invalidating task caches (since requesting a suggestion causes zero database mutations).
 
 #### 3. Structured Output & Post-Response Validation
 - Gemini is configured with `responseMimeType: 'application/json'` and a strict JSON schema:
@@ -515,16 +528,18 @@ The AI Subsystem provides natural-language task improvement via Google Gemini 3.
   3. Enforces length bounds (title $\le 200$, description $\le 2000$).
   4. Returns sanitized `TaskSuggestionData`.
 
-#### 4. Suggestion-Only Boundary (Zero Side Effects)
-- The endpoint purely returns suggested content.
-- It does **NOT** create a task document, modify task status, alter timers, or save suggestions into MongoDB.
-- Task persistence remains entirely under the user's manual discretion.
+#### 4. Suggestion-Only Boundary & User Control (Zero Side Effects)
+- The feature is strictly optional and user-driven.
+- **Accept Suggestion**: Only populates the active form fields (`title`, `description`). It **never** submits or creates the task document automatically.
+- **Ignore Suggestion**: Dismisses the preview and leaves current form inputs untouched.
+- The task is persisted to MongoDB only when the user explicitly clicks the existing "Create Task" or "Save Changes" button.
 
 #### 5. Resilient Error Handling
 - `400 Bad Request`: Missing body, empty input, non-string, or input $> 1000$ characters.
 - `401 Unauthorized`: Unauthenticated request.
 - `503 Service Unavailable`: Upstream Gemini provider failure, unconfigured API key, quota limit, or malformed AI response.
-- Raw SDK error details, internal stack traces, and API keys are never leaked to API clients.
+- Frontend displays a non-blocking, friendly message: *"AI improvement is currently unavailable. You can still create the task manually."*
+- AI failures never disrupt or block standard manual task creation.
 
 
 

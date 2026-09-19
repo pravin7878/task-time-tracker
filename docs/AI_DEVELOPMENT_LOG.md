@@ -672,6 +672,43 @@ This log records prompts, architectural decisions, implementations, and verifica
     - `npm run test:summary`: **56 PASSED, 0 FAILED**
   - Git status verification: **Strictly 0 changes under `frontend/`**.
 
+---
+
+## Milestone 10 (Part B): Gemini AI Task Improvement Frontend Integration
+
+- **Date**: 2026-09-19
+- **Objective**: Integrate the Gemini task-suggestion API (`POST /api/ai/task-suggestion`) into the frontend `TaskFormModal`. Add an optional "Improve with Gemini" feature with an Accept/Ignore preview area, loading states, error handling, and form autofill without auto-submitting the task or modifying backend code.
+- **Prompt Used**:
+  > "Implement Milestone 10 Part B — Gemini AI Task Improvement Frontend Integration.
+  > IMPORTANT: The Gemini backend integration from Part A is already complete and tested. This milestone is FRONTEND ONLY.
+  > Do NOT modify: backend/src/services/ai.service.ts, backend/src/controllers/ai.controller.ts, backend/src/routes/ai.routes.ts, backend/src/validators/ai.validator.ts, backend/src/types/ai.types.ts, Gemini backend configuration, Gemini API key handling, existing backend AI tests.
+  > Use existing backend endpoint: POST /api/ai/task-suggestion.
+  > GOAL: Integrate the existing Gemini task-suggestion API into the current TaskFormModal. The feature must remain optional. Normal task creation must continue working exactly as before. Gemini only improves the user's task title and description. The user must explicitly choose whether to use the suggestion."
+- **Key Architectural Decisions**:
+  - **Zero Backend Changes & Frontend Key Isolation**: No modifications made to any backend file. Zero Gemini API keys exist on the client (`VITE_` or hard-coded). All communication is routed to the authenticated backend endpoint `POST /api/ai/task-suggestion`.
+  - **Dedicated Service & Type Layer**: Created `frontend/src/types/ai.types.ts` (`TaskSuggestionData`, `TaskSuggestionResponse`) and `frontend/src/services/ai.service.ts` (`getTaskSuggestion`) reusing the centralized `apiClient`.
+  - **Non-Invalidating TanStack Mutation**: `useTaskSuggestion()` uses TanStack `useMutation` without invalidating task caches, reflecting that generating an AI suggestion does not change persisted server data.
+  - **Interactive Accept / Ignore UX**:
+    - "Improve with Gemini" button placed naturally beside the Task Title label.
+    - Input combines Title and Description if available (or uses either individually).
+    - Suggestion card displays "Suggested Title" and "Suggested Description" in a visually distinct preview box with "Accept Suggestion" and "Ignore" actions.
+    - **Accept** updates the form fields via React Hook Form's `setValue` without submitting or creating the task.
+    - **Ignore** dismisses the suggestion preview without altering existing inputs.
+    - The user must explicitly click the primary "Create Task" button to persist the task.
+  - **Graceful Error Handling**: Displays a dismissible, non-blocking notice (*"AI improvement is currently unavailable. You can still create the task manually."*) on failure. Standard manual task creation is never blocked or compromised.
+- **Files Created**:
+  - `frontend/src/types/ai.types.ts`
+  - `frontend/src/services/ai.service.ts`
+  - `frontend/src/hooks/useTaskSuggestion.ts`
+- **Files Modified**:
+  - `frontend/src/components/tasks/TaskFormModal.tsx`
+  - `docs/ARCHITECTURE.md` (updated Section 6.7 to include Part B)
+  - `docs/AI_DEVELOPMENT_LOG.md` (documented Milestone 10 Part B)
+- **Verification Performed & Results**:
+  - Frontend TypeScript & production bundle build (`npm run build` in `frontend`): **PASSED** with 0 errors (`tsc && vite build`, 168 modules transformed in 10.19s).
+  - Security verification: Confirmed 0 occurrences of `GEMINI_API_KEY` or `VITE_` keys in `frontend/`.
+  - Backend integrity check: Confirmed 0 backend files were modified during Part B.
+
 
 
 
