@@ -1,99 +1,154 @@
-# Task & Time Tracking App - Development Plan
+# Task & Time Tracking App - Development Plan & Execution History
 
-This document outlines the 12 sequential milestones for the project. Each milestone represents a discrete, verifiable unit of work.
+## 1. Overview & Planning Reconciliation
+
+The project was initially conceived as a 12-milestone sequential roadmap. During active engineering, the implementation strategy evolved from building frontend placeholders to delivering complete, vertical feature slices integrated directly against the production-ready Node.js backend.
+
+This document reconciles the **original planned scope** against the **actual completed implementation history** documented in `docs/AI_DEVELOPMENT_LOG.md`.
 
 ---
 
-## Milestone 1: Project Scaffolding & Foundation Setup (Current)
-- **Objective**: Establish monorepo structure, backend and frontend configurations, TypeScript standards, documentation, and development tooling.
-- **Key Deliverables**:
-  - Root `.gitignore`, `README.md`, convenience scripts.
-  - Complete documentation in `/docs`.
-  - Backend project scaffolding (`Node.js`, `Express`, `TypeScript`, `tsconfig.json`, `.env.example`, health check).
-  - Frontend project scaffolding (`Vite`, `React`, `TypeScript`, `Tailwind CSS`, `.env.example`).
-  - Verification that both builds and TypeScript checks pass without errors.
+## 2. Actual Completed Implementation History
 
-## Milestone 2: Authentication API
-- **Objective**: Implement secure user registration, login, logout, session verification, and JWT HTTP-only cookie handling.
+### Milestone 1: Project Setup & Monorepo Foundation
+- **Scope**: Backend & frontend directory layout, root scripts, documentation suite, TypeScript compiler settings, environment templates, and Express health check.
 - **Key Deliverables**:
-  - `User` Mongoose model with bcrypt password hashing and uniqueness indexing.
-  - Explicit input validation for auth requests (name, email format, password strength).
-  - Auth service and controller (`/api/auth/register`, `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`).
-  - JWT generation and verification utilities with HTTP-only cookie management.
-  - Authentication middleware (`requireAuth`) enforcing protected routes.
+  - Monorepo directory structure (`/backend`, `/frontend`, `/docs`).
+  - Strict TypeScript configurations (`tsconfig.json`).
+  - Baseline health check endpoint (`GET /api/health`).
+  - Initial documentation suite in `/docs`.
+- **Status**: **Completed** (2026-09-17)
 
-## Milestone 3: Task Management API
-- **Objective**: Implement secure, user-isolated CRUD endpoints for task management.
+### Milestone 2: Authentication API & Functional Refactor
+- **Scope**: User registration, login, logout, session verification, and refactoring to a 100% functional architecture.
 - **Key Deliverables**:
-  - `Task` Mongoose model with compound indexes (`userId`, `status`).
-  - Validation functions for task title, description, and status transitions (`pending`, `in_progress`, `completed`).
-  - Task service and controller (`GET /api/tasks`, `POST /api/tasks`, `GET /api/tasks/:id`, `PUT /api/tasks/:id`, `DELETE /api/tasks/:id`).
-  - Deletion safeguard returning `409 Conflict` ("Cannot delete a task while its timer is running.") if an active timer exists for the task.
+  - `User` Mongoose model with `bcrypt` password hashing (salt rounds $\ge 10$) and unique email index.
+  - Functional service and controller exports (`register`, `login`, `logout`, `me`).
+  - JWT utilities with secure HTTP-only cookies (`token`).
+  - Centralized error handling and functional error factories (`createAppError`, etc.).
+  - Automated verification test suite: 45 passed, 0 failed.
+- **Status**: **Completed** (2026-09-18)
 
-## Milestone 4: Time Tracking API
-- **Objective**: Implement session-based time tracking with single-active timer enforcement.
+### Milestone 3: Task Management API
+- **Scope**: User-isolated task CRUD endpoints with natural language input and status lifecycle validation.
 - **Key Deliverables**:
-  - `TimeLog` Mongoose model (`startedAt`, `endedAt`, integer `duration` in seconds).
-  - Start timer endpoint (`POST /api/timer/start`) enforcing single-active timer constraint per user.
-  - Stop timer endpoint (`POST /api/timer/stop`) computing exact server-side duration.
-  - Active timer lookup endpoint (`GET /api/timer/active`) for refresh recovery.
-  - Time log history endpoint (`GET /api/time-logs`).
+  - `Task` Mongoose model with compound indexes (`userId: 1, createdAt: -1` and `userId: 1, status: 1`).
+  - Explicit runtime validators for title (1–200 chars), optional description (max 2000 chars), and status (`pending`, `in_progress`, `completed`).
+  - Endpoints: `POST /api/tasks`, `GET /api/tasks`, `GET /api/tasks/:id`, `PATCH /api/tasks/:id`, `DELETE /api/tasks/:id`.
+  - Active-timer deletion safeguard returning `409 Conflict` (`"Cannot delete a task while its timer is running."`).
+  - Automated verification test suite: 38 passed, 0 failed.
+- **Status**: **Completed** (2026-09-18)
 
-## Milestone 5: Daily Summary API
-- **Objective**: Implement dynamic, timezone-aware daily productivity aggregation.
+### Milestone 4: Time Tracking API
+- **Scope**: Session-based time tracking with server-authoritative timestamps, integer duration in seconds, and database-enforced single active timer constraint.
 - **Key Deliverables**:
-  - Timezone-aware date parsing utility.
-  - MongoDB aggregation pipeline computing total tracked seconds and tasks worked on for a given day.
-  - Summary controller and route (`GET /api/summary/daily`).
+  - `TimeLog` Mongoose model (`startedAt`, `endedAt`, `duration`).
+  - MongoDB partial unique index (`{ userId: 1 }, { unique: true, partialFilterExpression: { endedAt: null } }`) enforcing at most one active running timer per user at the database level.
+  - Endpoints: `POST /api/tasks/:taskId/timer/start`, `POST /api/tasks/:taskId/timer/stop`, `GET /api/timer/active`, `GET /api/time-logs`, `GET /api/tasks/:taskId/time-logs`.
+  - Dynamic task total time calculation: `SUM(duration)` across completed sessions (zero denormalized `Task.totalTime` field).
+  - Automated verification test suite: 47 passed, 0 failed.
+- **Status**: **Completed** (2026-09-18)
 
-## Milestone 6: Frontend Foundation & Design System
-- **Objective**: Establish client-side application shell, routing, Tailwind design tokens, and shared API clients.
+### Milestone 5: Daily Summary API
+- **Scope**: Authenticated, timezone-aware daily productivity aggregation with cross-midnight session partitioning.
 - **Key Deliverables**:
-  - Tailwind CSS custom palette, typography, and responsive container setup.
-  - Axios centralized API client configured with `withCredentials: true`.
-  - TanStack Query client configuration with sensible caching defaults.
-  - App shell layouts (`AuthLayout`, `DashboardLayout`) with responsive navigation.
+  - Endpoint: `GET /api/summary/today?timezone=<IANA timezone>` (timezone parameter required).
+  - Luxon integration for DST-aware IANA timezone calendar boundary calculation (`[startOfDay, startOfNextDay)`).
+  - Cross-midnight session splitting without double-counting.
+  - Dynamic inclusion of active timer elapsed seconds without mutating stored `TimeLog` records.
+  - Automated verification test suite: 56 passed, 0 failed.
+- **Status**: **Completed** (2026-09-18)
 
-## Milestone 7: Authentication UI & Integration
-- **Objective**: Build login and register user interfaces with form validation and route guards.
+### Milestone 6: Frontend Authentication
+- **Scope**: Client-side authentication flow, session restoration, and route protection using TanStack Query and React Hook Form.
 - **Key Deliverables**:
-  - React Hook Form integration with client-side validation messages.
-  - `AuthContext` managing user profile and login/logout state via `/api/auth/me`.
-  - Protected route guard redirecting unauthenticated users to `/login`.
+  - Centralized Axios client (`apiClient`) configured with `withCredentials: true`.
+  - `useAuth()` hook powered by TanStack Query (`queryKey: ['auth', 'me']`) with `/api/auth/me` as the sole source of truth.
+  - `LoginPage` and `RegisterPage` with client-side validation and server error presentation.
+  - `ProtectedRoute` and `PublicRoute` route guards.
+  - Zero token storage in `localStorage` or `sessionStorage`; pure HTTP-only cookie session handling.
+- **Status**: **Completed** (2026-09-19)
 
-## Milestone 8: Task Management UI & Integration
-- **Objective**: Build task management interface with natural-language creation, filters, and status controls.
+### Milestone 6B: Application Shell & Navigation
+- **Scope**: Responsive application layout separating chrome and navigation from domain views.
 - **Key Deliverables**:
-  - Task creation form accepting natural language input.
-  - Task card components with status badges and quick status toggle.
-  - Task edit modal and delete confirmation.
-  - Loading skeletons, empty states, and mutation error handling via TanStack Query.
+  - Desktop sidebar (`Sidebar.tsx`, 256px fixed) with active route matching and user identity display.
+  - Mobile slide-out drawer (`MobileNav.tsx`) with accessible backdrop overlay.
+  - Sticky top header (`Header.tsx`) with dynamic page title and mobile hamburger toggle.
+  - Base route views for Dashboard (`/app`), Tasks (`/app/tasks`), and Time Logs (`/app/time-logs`).
+- **Status**: **Completed** (2026-09-19)
 
-## Milestone 9: Time Tracking UI & Real-Time Timer
-- **Objective**: Build live elapsed timer widget and time tracking controls.
+### Milestone 7: Task Management UI & API Integration
+- **Scope**: End-to-end task management interface connected to the backend Task REST API.
 - **Key Deliverables**:
-  - Persistent real-time timer widget calculating elapsed time from server `startedAt`.
-  - Start/Stop tracking triggers with optimistic UI feedback.
-  - Active timer recovery on browser refresh via `/api/timer/active`.
-  - Time log session history table with formatted durations.
+  - `useTasks()` hook with automatic TanStack Query cache invalidations on mutations.
+  - `TaskCard` and `TaskListItem` with dual grid/list view toggles.
+  - `TaskFormModal` for creating and editing tasks with React Hook Form validation.
+  - `DeleteTaskModal` displaying 409 Conflict alerts when active timers prevent deletion.
+  - Status filter tabs ("All", "Pending", "In Progress", "Completed") with dynamic counts.
+- **Status**: **Completed** (2026-09-19)
 
-## Milestone 10: Dashboard & Daily Summary View
-- **Objective**: Build daily productivity overview displaying key performance metrics.
+### Milestone 8: Time Tracking UI & API Integration
+- **Scope**: Real-time timer widget and time tracking controls connected to the backend Time Tracking API.
 - **Key Deliverables**:
-  - Daily productivity metric cards (total time, tasks worked, status breakdown).
-  - Tasks worked on breakdown list.
-  - Bonus visual productivity chart (time distribution).
+  - Product rule separation: task status (`pending`, `in_progress`, `completed`) and timer state (`active`, `stopped`) remain distinct.
+  - Automatic transition: starting a timer on a `pending` task advances it to `in_progress` via `PATCH /api/tasks/:taskId`.
+  - Completed task protection: tasks in `completed` status cannot start a timer ("Reopen to track time").
+  - `LiveTimer` component calculating visual elapsed time dynamically from server `startedAt`.
+  - Active session recovery on refresh via `GET /api/timer/active`.
+  - `TimeLogsPage` displaying session history newest-first with zero N+1 queries.
+- **Status**: **Completed** (2026-09-19)
 
-## Milestone 11: Optional AI Task Enhancement
-- **Objective**: Add optional AI assistance for natural language task refinement.
+### Milestone 9: Daily Summary Dashboard UI & API Integration
+- **Scope**: Daily summary dashboard on `/app` connected to `GET /api/summary/today?timezone=...`.
 - **Key Deliverables**:
-  - Backend proxy route (`/api/ai/enhance-task`) calling AI provider securely.
-  - Frontend "Enhance with AI" button with review and edit preview dialog.
-  - Graceful fallback to manual creation on error or absence of API key.
+  - Automatic browser timezone detection via `Intl.DateTimeFormat().resolvedOptions().timeZone`.
+  - Productivity KPI cards: Total Time Tracked, Tasks Completed, In Progress, Pending.
+  - Tasks Worked On breakdown list with percentage share progress bars.
+  - Live active session callout banner with ticking elapsed timer.
+  - Cross-feature cache invalidation: timer and task mutations automatically refresh summary metrics.
+- **Status**: **Completed** (2026-09-19)
 
-## Milestone 12: QA, Optimization, Deployment & Documentation
-- **Objective**: Complete end-to-end verification, production builds, deployment, and final documentation.
+### Milestone 10 Part A: Gemini 3.6 Flash Backend Integration
+- **Scope**: Backend-only Gemini AI task suggestion endpoint (`POST /api/ai/task-suggestion`).
 - **Key Deliverables**:
-  - End-to-end testing across authentication, tasks, timer, and summaries.
-  - Deployment configuration for Vercel, Render, and MongoDB Atlas.
-  - Updated `README.md` with live demo link, test credentials, and architecture summary.
+  - Official `@google/genai` SDK integration inside backend only.
+  - Structured JSON schema output (`title`, `description`) via `responseSchema`.
+  - Dynamic model configuration via `process.env.GEMINI_MODEL` (default: `gemini-3.6-flash`).
+  - Explicit validation (1–1000 characters, trimmed, non-empty).
+  - Suggestion only: zero database writes, zero status updates, zero timer side effects.
+  - Automated mock test suite: 28 passed, 0 failed.
+- **Status**: **Completed** (2026-09-19)
+
+### Milestone 10 Part B: Gemini AI Task Improvement Frontend Integration
+- **Scope**: Frontend integration of the task suggestion API inside `TaskFormModal`.
+- **Key Deliverables**:
+  - "Improve with Gemini" button in `TaskFormModal`.
+  - Distinct suggestion preview card with "Accept Suggestion" and "Ignore" actions.
+  - Accept action populates form fields without submitting or creating the task.
+  - Non-blocking error handling: AI failure never disrupts manual task creation.
+  - Zero client-side API key exposure.
+- **Status**: **Completed** (2026-09-19)
+
+---
+
+## 3. Optional & Bonus Features Scope Reconciliation
+
+| Feature | Planned Category | Final Status | Implementation Details |
+| :--- | :--- | :--- | :--- |
+| **AI Task Suggestion** | Optional / Bonus | **Fully Implemented** | Backend `POST /api/ai/task-suggestion` + Frontend `TaskFormModal` "Improve with Gemini" flow (Milestone 10 Parts A & B). |
+| **Productivity Charts** | Optional / Bonus | **Not Implemented** | Post-MVP scope; excluded to maintain clean core functionality. |
+| **Weekly Summaries** | Optional / Bonus | **Not Implemented** | Post-MVP scope; daily summary fulfills core requirement. |
+| **Push Notifications / Reminders** | Optional / Bonus | **Not Implemented** | Post-MVP scope; visual header indicator and active timer recovery fulfill core requirements. |
+
+---
+
+## 4. Production Deployment Status
+
+- **Frontend**: Deployed to **Vercel** (`https://task-time-tracker-psi.vercel.app`).
+- **Backend**: Deployed to **Render** (`https://task-time-tracker-ft9a.onrender.com`).
+- **Database**: Hosted on **MongoDB Atlas**.
+- **Cross-Site Configuration**:
+  - Express reverse proxy trust enabled (`app.set('trust proxy', 1)`).
+  - Production cookies configured with `SameSite=None; Secure; HttpOnly; Path=/`.
+  - Strict CORS origin validation allowing the deployed Vercel domain with `credentials: true`.

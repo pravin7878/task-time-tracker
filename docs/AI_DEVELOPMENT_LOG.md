@@ -709,6 +709,47 @@ This log records prompts, architectural decisions, implementations, and verifica
   - Security verification: Confirmed 0 occurrences of `GEMINI_API_KEY` or `VITE_` keys in `frontend/`.
   - Backend integrity check: Confirmed 0 backend files were modified during Part B.
 
+---
+
+## Milestone 11: Production Deployment & Documentation Reconciliation
+
+- **Date**: 2026-09-19 – 2026-09-20
+- **Objective**: Audit and resolve cross-site cookie and CORS production deployment behavior between Vercel (frontend) and Render (backend), ensure deterministic production builds, and reconcile all six system documentation files against the actual implementation.
+- **Problem Statement**:
+  - In production (Frontend deployed on Vercel at `https://task-time-tracker-psi.vercel.app`, Backend deployed on Render at `https://task-time-tracker-ft9a.onrender.com`), login succeeded with HTTP 200, but subsequent requests returned HTTP 401 Unauthorized.
+  - Render operates behind an SSL-terminating reverse proxy and did not set `NODE_ENV=production` by default. As a result, the backend previously sent cookies with `SameSite=Lax` and `Secure=false`, which modern browsers strictly omit from cross-site requests.
+- **Key Architectural Decisions & Changes**:
+  - **Reverse Proxy Trust**: Added `app.set('trust proxy', 1)` in `backend/src/app.ts` so Express properly respects `X-Forwarded-Proto` and `X-Forwarded-For` from Render's reverse proxy.
+  - **Cross-Site Cookie Configuration**: Updated `setAuthCookie` and `clearAuthCookie` in `backend/src/utils/token.ts` with `secure: isProduction`, `sameSite: isProduction ? 'none' : 'lax'`, `httpOnly: true`, and `path: '/'`. Enhanced production detection to check `env.NODE_ENV === 'production' || process.env.RENDER === 'true'`.
+  - **CORS Normalization**: Implemented `getAllowedOrigins()` in `backend/src/app.ts` to sanitize `FRONTEND_URL` by stripping quotes, whitespace, and trailing slashes while preserving localhost development origins.
+  - **Helmet Configuration**: Updated `helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } })` to ensure cross-origin API responses can be read by the frontend.
+  - **Build Script Hardening**: Updated `backend/package.json` build script to `"npm install && tsc"` to ensure dependencies are installed cleanly on both Windows development environments and Render.
+  - **Documentation Reconciliation**: Reconciled `README.md`, `docs/REQUIREMENTS.md`, `docs/ARCHITECTURE.md`, `docs/API.md`, `docs/DEVELOPMENT_PLAN.md`, and `docs/AI_DEVELOPMENT_LOG.md` for 100% factual accuracy against actual source code.
+- **Files Modified**:
+  - `backend/src/utils/token.ts`
+  - `backend/src/app.ts`
+  - `backend/src/config/env.ts`
+  - `backend/package.json`
+  - `backend/.env.example`
+  - `frontend/.env.example`
+  - `README.md`
+  - `docs/REQUIREMENTS.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/API.md`
+  - `docs/DEVELOPMENT_PLAN.md`
+  - `docs/AI_DEVELOPMENT_LOG.md`
+- **Verification Performed & Results**:
+  - Backend TypeScript compilation (`npm run build` in `backend`): **PASSED** with 0 errors.
+  - Frontend production build (`npm run build` in `frontend`): **PASSED** with 0 errors (`tsc && vite build`).
+  - Full backend automated test regression suites:
+    - `npm run test:auth`: **45 PASSED, 0 FAILED**
+    - `npm run test:tasks`: **38 PASSED, 0 FAILED**
+    - `npm run test:timer`: **47 PASSED, 0 FAILED**
+    - `npm run test:summary`: **56 PASSED, 0 FAILED**
+    - `npm run test:ai`: **28 PASSED, 0 FAILED**
+    - **Total**: **214 tests passing, 0 failures**.
+
+
 
 
 

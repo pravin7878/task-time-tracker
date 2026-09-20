@@ -146,8 +146,8 @@ interface ITimeLog {
     `duration = Math.max(0, Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000))`
   - Saves the record and returns the completed `TimeLog`.
 
-### 4.2 Single Active Timer Concurrency Protection
-The system enforces the single-active-timer constraint via a **dual-layer defense**:
+### 4.2 At Most One Active Timer Concurrency Protection
+The system enforces the at-most-one-active-timer constraint (a user can have at most one running timer, or zero when inactive) via a **dual-layer defense**:
 1. **Application Pre-Flight Check**:
    - The functional service performs an initial `TimeLog.findOne({ userId, endedAt: null })`.
    - If an active timer exists, it immediately rejects with `409 Conflict` (`"Another timer is already running. Stop it before starting a new timer."`).
@@ -198,7 +198,7 @@ The system enforces the single-active-timer constraint via a **dual-layer defens
 ---
 
 ## 5. Security Architecture
-- **JWT in HTTP-only Cookies**: Prevents XSS token exfiltration.
+- **JWT in HTTP-only Cookies**: HTTP-only cookies prevent client-side JavaScript from directly reading the JWT, reducing the risk of token exfiltration through XSS.
 - **CORS Configuration**: Restricts origin to the frontend host, enforces `credentials: true`.
 - **Helmet**: Injects secure HTTP headers (HSTS, CSP, X-Frame-Options).
 - **Password Security**: Passwords hashed using bcrypt with salt rounds >= 10.
@@ -229,8 +229,9 @@ Authenticated Application (/app)
 
 ### 6.2 Key Architectural Principles
 1. **Zero Client Token Storage**:
-   - The frontend never reads, decodes, or stores the JWT in `localStorage`, `sessionStorage`, cookies, React state, or URL parameters.
-   - Completely eliminates vulnerabilities related to XSS token theft.
+   - The browser manages the JWT in an HTTP-only cookie.
+   - Client-side JavaScript application code never reads, decodes, or stores the JWT in `localStorage`, `sessionStorage`, React state, or URL parameters.
+   - HTTP-only cookies prevent client-side script from accessing the session token, significantly reducing the risk of token exfiltration through XSS.
 2. **Server as Single Source of Truth**:
    - The authoritative session state is determined exclusively by `GET /api/auth/me`.
    - On page refresh or browser reopening, TanStack Query queries `/api/auth/me`. If the HTTP-only cookie is present and valid, the user seamlessly remains authenticated without state drift.
@@ -352,7 +353,7 @@ TasksPage (Component UI)
 
 ### 6.5 Time Tracking Architecture (Milestone 8)
 
-The frontend time tracking architecture bridges the authoritative backend Time Tracking REST API (`POST /api/tasks/:id/timer/start`, `POST /api/tasks/:id/timer/stop`, `GET /api/timer/active`, `GET /api/time-logs`, `GET /api/tasks/:id/time-logs`) with modern reactive UI components:
+The frontend time tracking architecture bridges the authoritative backend Time Tracking REST API (`POST /api/tasks/:taskId/timer/start`, `POST /api/tasks/:taskId/timer/stop`, `GET /api/timer/active`, `GET /api/time-logs`, `GET /api/tasks/:taskId/time-logs`) with modern reactive UI components:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -367,9 +368,9 @@ The frontend time tracking architecture bridges the authoritative backend Time T
              │ (['timer', 'active'])    timeTracking.service.ts
              │                                  │
              ▼                                  ▼
-      GET /api/timer/active             POST /tasks/:id/timer/start
-                                        POST /tasks/:id/timer/stop
-                                        PATCH /tasks/:id (auto-progress)
+      GET /api/timer/active             POST /api/tasks/:taskId/timer/start
+                                        POST /api/tasks/:taskId/timer/stop
+                                        PATCH /api/tasks/:id (auto-progress)
 ```
 
 #### 1. Invariants & Product Separation

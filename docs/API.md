@@ -492,10 +492,9 @@ All responses follow a standard envelope format:
 
 ### `POST /api/ai/task-suggestion`
 - **Description**: Accepts a user's natural language task input and uses Google Gemini 3.6 Flash (`@google/genai`) to generate an improved task title and structured description. Suggestion only: does NOT create or modify tasks in MongoDB.
-- **Auth**: Required (`requireAuth` middleware via HttpOnly cookie or `Authorization: Bearer <token>`)
+- **Auth**: Required (JWT cookie; Bearer authorization header also accepted for programmatic testing)
 - **Headers**:
   - `Content-Type: application/json`
-  - `Cookie: token=<jwt>` or `Authorization: Bearer <token>`
 - **Request Body**:
 ```json
 {
